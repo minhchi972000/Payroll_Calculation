@@ -71,6 +71,26 @@ Ví dụ đã điền sẵn 3 người (dữ liệu giả, để chạy thử): 
 - SĐT có thể ghi `0901234567`, `0901 234 567`, `+84901234567`. Ô kiểu số bị mất số 0 đầu vẫn đọc đúng.
 - Cột có chữ "Thực lĩnh" / "Thực nhận" / "Thực lãnh" được làm nổi bật ở đầu phiếu lương.
 
+## Bản prod và bản demo
+
+| | Địa chỉ | Database | Deploy |
+|---|---|---|---|
+| Prod (dữ liệu thật) | https://bang-luong.bang-luong.workers.dev | `bang-luong` | `npm run deploy` |
+| Demo (dữ liệu giả) | https://bang-luong-demo.bang-luong.workers.dev | `bang-luong-demo` | `npm run deploy:demo` |
+
+Hai bản dùng chung code nhưng database và tài khoản admin riêng. Bản demo có dải "BẢN DEMO" ở đầu trang
+(hiện khi địa chỉ web có chữ "demo"). Demo đã nạp sẵn file [mau/bang-luong-mau.xlsx](mau/bang-luong-mau.xlsx)
+cho tháng 10/2026; 3 nhân viên giả đăng nhập bằng số CCCD trong file (ví dụ `036095004567`) và mật khẩu `demo123`.
+
+Đổi code thì deploy cả hai. Có migration mới thì chạy cho cả hai database:
+
+```bash
+npm run db:migrate:remote && npm run deploy          # prod
+npm run db:migrate:demo && npm run deploy:demo       # demo
+```
+
+Tài khoản admin của demo đặt riêng: `npx wrangler secret put ADMIN_USERNAME --env demo` (tương tự với `ADMIN_PASSWORD`).
+
 ## Nâng cấp bản đã triển khai
 
 Khi có file mới trong `migrations/`, chạy lại trước khi deploy:

@@ -16,5 +16,19 @@
       "migrations_dir": "migrations"
     }
   ],
-  "observability": { "enabled": true }
+  "observability": { "enabled": true },
+  // Bản demo: web riêng (bang-luong-demo) và database riêng, dữ liệu giả để thử.
+  // Deploy bằng: npm run deploy:demo
+  "env": {
+    "demo": {
+      "d1_databases": [
+        {
+          "binding": "DB",
+          "database_name": "bang-luong-demo",
+          "database_id": "5a2ebb36-6029-4af2-b69a-bfcff2a132de",
+          "migrations_dir": "migrations"
+        }
+      ]
+    }
+  }
 }

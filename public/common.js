@@ -91,3 +91,8 @@ export function showError(container, err) {
   container.textContent = err ? err.message || String(err) : '';
   container.hidden = !err;
 }
+
+// Bản demo (địa chỉ có chữ "demo") hiện dải cảnh báo để không ai nhập bảng lương thật vào đây
+if (location.hostname.includes('demo')) {
+  document.body.prepend(el('div', { class: 'demo-banner' }, 'BẢN DEMO · dữ liệu giả, không nhập bảng lương thật vào đây'));
+}

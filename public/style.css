@@ -28,6 +28,19 @@ body {
 
 a { color: var(--primary); font-weight: 600; }
 
+.demo-banner {
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  background: #b54708;
+  color: #fff;
+  text-align: center;
+  font-size: 13px;
+  font-weight: 700;
+  padding: 6px 12px;
+  letter-spacing: 0.02em;
+}
+
 .wrap { max-width: 480px; margin: 0 auto; padding: 24px 16px 48px; }
 .wrap.wide { max-width: 960px; }
 
