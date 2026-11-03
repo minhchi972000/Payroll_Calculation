@@ -82,14 +82,22 @@ document.querySelectorAll('.tabs button').forEach((button) => {
 
 // ---------- Nhập bảng lương ----------
 
-function defaultPeriod() {
-  // Lương thường chốt cho tháng trước
-  const d = new Date();
-  d.setDate(1);
-  d.setMonth(d.getMonth() - 1);
+function monthsFromNow(offset) {
+  const now = new Date();
+  const d = new Date(now.getFullYear(), now.getMonth() + offset, 1);
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
 }
-$('import-period').value = defaultPeriod();
+
+// Danh sách tháng bằng tiếng Việt ("Tháng 10/2026"), vì ô type="month" của trình duyệt
+// hiện theo ngôn ngữ máy (ví dụ "October 2026"). Từ tháng sau lùi về 24 tháng.
+$('import-period').replaceChildren(
+  ...Array.from({ length: 26 }, (_, i) => {
+    const period = monthsFromNow(1 - i);
+    return el('option', { value: period }, formatPeriod(period));
+  }),
+);
+// Lương thường chốt cho tháng trước
+$('import-period').value = monthsFromNow(-1);
 
 function currentSource() {
   return document.querySelector('input[name="source"]:checked').value;
