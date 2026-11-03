@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { generateCode, hashInitialCode, hashPassword, verifyPassword } from '../src/auth.js';
+import { hashInitialCode, hashPassword, initialPassword, verifyPassword } from '../src/auth.js';
 import { buildAssertion, fillMerges, parseSheetUrl } from '../src/gsheet.js';
 
 test('mật khẩu PBKDF2', async () => {
@@ -10,12 +10,12 @@ test('mật khẩu PBKDF2', async () => {
   assert.ok(!(await verifyPassword('matkhau124', hash)));
 });
 
-test('mã ban đầu', async () => {
-  const code = generateCode();
-  assert.match(code, /^\d{8}$/);
+test('mật khẩu ban đầu là 6 số cuối CCCD', async () => {
+  const code = initialPassword('079300001234');
+  assert.equal(code, '001234');
   const hash = await hashInitialCode(code);
-  assert.ok(await verifyPassword(code, hash));
-  assert.ok(!(await verifyPassword('00000000', hash)) || code === '00000000');
+  assert.ok(await verifyPassword('001234', hash));
+  assert.ok(!(await verifyPassword('079300001234', hash)));
   assert.ok(!(await verifyPassword(code, 'rác')));
 });
 

@@ -7,9 +7,9 @@ import {
   clearFailures,
   createSession,
   deleteSession,
-  generateCode,
   getSession,
   hashInitialCode,
+  initialPassword,
   hashPassword,
   isRateLimited,
   now,
@@ -79,12 +79,12 @@ async function requireAdmin(request, env) {
   if (!session) throw new HttpError(401, 'Bạn chưa đăng nhập admin.');
 }
 
-function validateNewPassword(password) {
+function validateNewPassword(password, loginId) {
   if (typeof password !== 'string' || password.length < MIN_PASSWORD_LENGTH) {
     throw new HttpError(400, `Mật khẩu mới phải có ít nhất ${MIN_PASSWORD_LENGTH} ký tự.`);
   }
   if (password.length > 128) throw new HttpError(400, 'Mật khẩu quá dài.');
-  if (/^\d{8}$/.test(password)) throw new HttpError(400, 'Mật khẩu mới không được là dãy 8 chữ số giống mã ban đầu.');
+  if (password === initialPassword(loginId)) throw new HttpError(400, 'Mật khẩu mới không được là 6 số cuối số CCCD.');
 }
 
 // ---------- Nhân viên ----------
@@ -153,7 +153,7 @@ async function changePassword(request, env) {
   if (!(await verifyPassword(String(body.currentPassword ?? ''), row.password_hash))) {
     throw new HttpError(400, 'Mật khẩu hiện tại không đúng.');
   }
-  validateNewPassword(body.newPassword);
+  validateNewPassword(body.newPassword, employee.login_id);
 
   const hash = await hashPassword(body.newPassword);
   const token = await createSession(env.DB, 'employee', employee.login_id, EMPLOYEE_SESSION_SECONDS);
@@ -313,12 +313,11 @@ async function adminImport(request, env) {
         statements.push(env.DB.prepare('UPDATE employees SET name = ?, updated_at = ? WHERE login_id = ?').bind(r.name, t, r.loginId));
       }
     } else {
-      const code = generateCode();
-      newAccounts.push({ loginId: r.loginId, name: r.name, code });
+      newAccounts.push({ loginId: r.loginId, name: r.name });
       statements.push(
         env.DB.prepare(
           'INSERT INTO employees (login_id, name, password_hash, must_change_password, created_at, updated_at) VALUES (?, ?, ?, 1, ?, ?)',
-        ).bind(r.loginId, r.name, await hashInitialCode(code), t, t),
+        ).bind(r.loginId, r.name, await hashInitialCode(initialPassword(r.loginId)), t, t),
       );
     }
   }
@@ -358,17 +357,16 @@ async function adminResetCode(request, env, loginId) {
   await requireAdmin(request, env);
   const employee = await env.DB.prepare('SELECT login_id, name FROM employees WHERE login_id = ?').bind(loginId).first();
   if (!employee) throw new HttpError(404, 'Không tìm thấy nhân viên.');
-  const code = generateCode();
   await env.DB.batch([
     env.DB.prepare('UPDATE employees SET password_hash = ?, must_change_password = 1, updated_at = ? WHERE login_id = ?').bind(
-      await hashInitialCode(code),
+      await hashInitialCode(initialPassword(loginId)),
       now(),
       loginId,
     ),
     env.DB.prepare("DELETE FROM sessions WHERE kind = 'employee' AND subject = ?").bind(loginId),
     env.DB.prepare('DELETE FROM rate_limits WHERE key = ?').bind(`id:${loginId}`),
   ]);
-  return json({ loginId, name: employee.name, code });
+  return json({ loginId, name: employee.name });
 }
 
 async function adminDeleteEmployee(request, env, loginId) {

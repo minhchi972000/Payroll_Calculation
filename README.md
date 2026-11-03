@@ -41,11 +41,15 @@ Muốn dùng tên miền riêng (ví dụ `luong.congty.vn`): Cloudflare dashboa
 1. Vào `/admin` → **Nhập bảng lương** → chọn tháng → chọn file Excel (hoặc dán link Google Sheet).
 2. Bấm **Kiểm tra dữ liệu**: xem số người, các cột nhân viên sẽ thấy, các dòng lỗi.
 3. Bấm **Xác nhận nhập**. Nhân viên xem được ngay.
-4. Nếu có nhân viên mới, hệ thống tạo **mã 8 số** cho từng người. Bấm **Sao chép tin nhắn** rồi gửi qua Zalo,
-   hoặc **Tải danh sách mã (CSV)**. Mã chỉ hiện một lần.
+4. Nếu có nhân viên mới, hệ thống tạo tài khoản với **mật khẩu lần đầu là 6 số cuối số CCCD**.
+   Bấm **Sao chép tin nhắn** rồi gửi một tin hướng dẫn chung vào nhóm Zalo, không cần gửi riêng từng người.
 
-Nhân viên đăng nhập lần đầu bằng số CCCD + mã 8 số, sau đó tự đặt mật khẩu riêng.
-Quên mật khẩu: admin vào tab **Nhân viên** → **Cấp mã mới**.
+Nhân viên đăng nhập lần đầu bằng số CCCD + 6 số cuối CCCD, sau đó bắt buộc đặt mật khẩu riêng
+(không được dùng lại 6 số cuối CCCD). Quên mật khẩu: admin vào tab **Nhân viên** → **Đặt lại mật khẩu**
+(về 6 số cuối CCCD).
+
+Lưu ý: số CCCD không phải bí mật. Ai biết CCCD của một người **chưa đăng nhập lần nào** thì đăng nhập được thay họ.
+Nên nhắc nhân viên đăng nhập và đổi mật khẩu sớm sau khi có bảng lương.
 
 Nhập lại cùng một tháng sẽ **thay thế** toàn bộ dữ liệu cũ của tháng đó (dùng khi sửa sai).
 
@@ -132,8 +136,8 @@ npm test
 
 - Phiếu lương luôn được lọc theo số CCCD trong phiên đăng nhập ở server, không theo tham số từ trình duyệt.
 - Mật khẩu nhân viên được băm (PBKDF2). Phiên đăng nhập là cookie HttpOnly, chỉ lưu bản băm trong database.
-- Sai 5 lần với cùng một tài khoản thì khoá 15 phút. Admin bấm "Cấp mã mới" sẽ mở khoá ngay.
-- Đổi mật khẩu hoặc cấp mã mới sẽ đăng xuất người đó khỏi mọi thiết bị khác.
+- Sai 5 lần với cùng một tài khoản thì khoá 15 phút. Admin bấm "Đặt lại mật khẩu" sẽ mở khoá ngay.
+- Đổi mật khẩu hoặc đặt lại mật khẩu sẽ đăng xuất người đó khỏi mọi thiết bị khác.
 - Admin đăng nhập bằng một tài khoản chung (`ADMIN_USERNAME` + `ADMIN_PASSWORD`), phiên admin hết hạn sau 8 giờ.
   Sai 5 lần từ cùng một máy thì khoá 15 phút.
   Đổi tài khoản hoặc mật khẩu admin: chạy lại `npx wrangler secret put ADMIN_USERNAME` / `ADMIN_PASSWORD`.

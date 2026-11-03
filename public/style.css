@@ -254,6 +254,8 @@ td code, .code { font: 600 15px ui-monospace, SFMono-Regular, Menlo, monospace; 
 }
 
 ul.messages { margin: 8px 0 0; padding-left: 20px; font-size: 14px; }
+pre.message { margin: 12px 0 0; padding: 12px; background: var(--bg); border: 1px solid var(--line); border-radius: 8px;
+  font: 14px/1.5 inherit; font-family: inherit; white-space: pre-wrap; word-break: break-word; }
 .row-actions { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 12px; }
 .row-actions button.primary { width: auto; margin-top: 0; }
 .chips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; }

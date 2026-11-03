@@ -281,12 +281,12 @@ $('confirm-btn').addEventListener('click', async (event) => {
   }
 });
 
-function loginMessage({ name, loginId, code }) {
+// Tin nhắn chung gửi cả nhóm (Zalo): mật khẩu ban đầu là 6 số cuối CCCD nên không cần gửi riêng
+function loginMessage() {
   return [
-    `Chào ${name || 'bạn'}, bảng lương của bạn xem tại: ${location.origin}`,
-    `Đăng nhập bằng số CCCD: ${loginId}`,
-    `Mã đăng nhập: ${code}`,
-    'Lần đầu đăng nhập bạn sẽ đặt mật khẩu mới. Không chia sẻ mã này cho người khác.',
+    `Bảng lương xem tại: ${location.origin}`,
+    'Đăng nhập bằng số CCCD (đủ 12 số).',
+    'Mật khẩu lần đầu: 6 số cuối số CCCD của bạn. Sau đó hệ thống sẽ yêu cầu đặt mật khẩu riêng.',
   ].join('\n');
 }
 
@@ -308,34 +308,10 @@ function accountsTable(accounts) {
     asCards(el(
       'table',
       {},
-      el('thead', {}, el('tr', {}, el('th', {}, 'Họ tên'), el('th', {}, 'Số CCCD'), el('th', {}, 'Mã đăng nhập'), el('th', {}, ''))),
-      el(
-        'tbody',
-        {},
-        accounts.map((a) =>
-          el(
-            'tr',
-            {},
-            el('td', {}, a.name || '—'),
-            el('td', {}, a.loginId),
-            el('td', {}, el('code', {}, a.code)),
-            el('td', { class: 'actions' }, el('button', { class: 'ghost', type: 'button', onclick: (e) => copyText(loginMessage(a), e.currentTarget) }, 'Sao chép tin nhắn')),
-          ),
-        ),
-      ),
+      el('thead', {}, el('tr', {}, el('th', {}, 'Họ tên'), el('th', {}, 'Số CCCD'))),
+      el('tbody', {}, accounts.map((a) => el('tr', {}, el('td', {}, a.name || '—'), el('td', {}, a.loginId)))),
     )),
   );
-}
-
-function downloadCsv(accounts, period) {
-  const quote = (v) => `"${String(v).replace(/"/g, '""')}"`;
-  const lines = [['Họ tên', 'Số CCCD', 'Mã đăng nhập', 'Tin nhắn'].map(quote).join(',')];
-  // ="0793..." để Excel giữ số 0 đầu
-  for (const a of accounts) lines.push([quote(a.name), `="${a.loginId}"`, `="${a.code}"`, quote(loginMessage(a))].join(','));
-  const blob = new Blob(['﻿' + lines.join('\r\n')], { type: 'text/csv;charset=utf-8' });
-  const link = el('a', { href: URL.createObjectURL(blob), download: `ma-dang-nhap-${period}.csv` });
-  link.click();
-  setTimeout(() => URL.revokeObjectURL(link.href), 1000);
 }
 
 function renderResult(r) {
@@ -345,11 +321,12 @@ function renderResult(r) {
       el(
         'p',
         { class: 'notice' },
-        `Có ${r.newAccounts.length} nhân viên mới. Hãy gửi mã đăng nhập cho từng người (qua Zalo/SMS). `,
-        el('b', {}, 'Mã chỉ hiện một lần'),
-        ', nếu mất hãy vào tab Nhân viên để cấp mã mới.',
+        `Có ${r.newAccounts.length} nhân viên mới. Mật khẩu lần đầu của mỗi người là `,
+        el('b', {}, '6 số cuối số CCCD'),
+        '. Gửi tin nhắn hướng dẫn dưới đây vào nhóm Zalo của công ty.',
       ),
-      el('div', { class: 'row-actions' }, el('button', { class: 'ghost', type: 'button', onclick: () => downloadCsv(r.newAccounts, r.period) }, 'Tải danh sách mã (CSV)')),
+      el('pre', { class: 'message' }, loginMessage()),
+      el('div', { class: 'row-actions' }, el('button', { class: 'ghost', type: 'button', onclick: (e) => copyText(loginMessage(), e.currentTarget) }, 'Sao chép tin nhắn')),
       accountsTable(r.newAccounts),
     );
   }
@@ -441,7 +418,7 @@ function renderEmployees() {
           el(
             'td',
             { class: 'actions' },
-            el('button', { class: 'ghost', type: 'button', onclick: () => resetCode(e) }, 'Cấp mã mới'),
+            el('button', { class: 'ghost', type: 'button', onclick: () => resetPassword(e) }, 'Đặt lại mật khẩu'),
             el('button', { class: 'danger', type: 'button', onclick: () => deleteEmployee(e) }, 'Xoá'),
           ),
         ),
@@ -451,14 +428,14 @@ function renderEmployees() {
   asCards(table);
 }
 
-async function resetCode(employee) {
-  if (!confirm(`Cấp mã đăng nhập mới cho ${employee.name || employee.login_id}? Mật khẩu cũ sẽ không dùng được nữa.`)) return;
+async function resetPassword(employee) {
+  const who = employee.name || employee.login_id;
+  if (!confirm(`Đặt lại mật khẩu của ${who} về 6 số cuối số CCCD? Mật khẩu cũ sẽ không dùng được nữa.`)) return;
   try {
-    const account = await api(`/api/admin/employees/${employee.login_id}/reset`, { method: 'POST' });
+    await api(`/api/admin/employees/${employee.login_id}/reset`, { method: 'POST' });
     $('code-card').replaceChildren(
-      el('h2', {}, 'Mã đăng nhập mới'),
-      el('p', { class: 'notice' }, 'Mã chỉ hiện một lần. Hãy gửi cho nhân viên ngay.'),
-      accountsTable([account]),
+      el('p', { class: 'success' }, `Đã đặt lại mật khẩu của ${who} (CCCD ${employee.login_id}) về 6 số cuối số CCCD. `,
+        'Lần đăng nhập tới, người đó sẽ phải đặt mật khẩu riêng.'),
     );
     $('code-card').hidden = false;
     loadEmployees();

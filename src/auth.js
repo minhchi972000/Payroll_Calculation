@@ -48,8 +48,8 @@ export async function hashPassword(password) {
   return `pbkdf2$${PBKDF2_ITERATIONS}$${salt}$${await pbkdf2(password, salt, PBKDF2_ITERATIONS)}`;
 }
 
-// Mã ban đầu do hệ thống sinh: dùng SHA-256 cho nhanh, vì một lần nhập có thể tạo hàng trăm mã
-// trong cùng một request. Mã này bắt buộc phải đổi ở lần đăng nhập đầu tiên.
+// Mật khẩu ban đầu: dùng SHA-256 cho nhanh, vì một lần nhập có thể tạo hàng trăm tài khoản
+// trong cùng một request. Mật khẩu này bắt buộc phải đổi ở lần đăng nhập đầu tiên.
 export async function hashInitialCode(code) {
   const salt = randomSaltHex();
   return `sha256$${salt}$${await sha256Hex(salt + code)}`;
@@ -66,15 +66,10 @@ export async function verifyPassword(password, stored) {
   return false;
 }
 
-export function generateCode() {
-  // 8 chữ số, dễ gõ trên điện thoại. Rejection sampling để các chữ số phân bố đều.
-  let code = '';
-  while (code.length < 8) {
-    for (const b of crypto.getRandomValues(new Uint8Array(16))) {
-      if (b < 250 && code.length < 8) code += String(b % 10);
-    }
-  }
-  return code;
+// Mật khẩu ban đầu (và khi admin đặt lại) là 6 số cuối số CCCD, admin không phải gửi mã riêng cho từng người.
+// Ai biết CCCD đều đoán được, nên luôn bắt đổi ở lần đăng nhập đầu và không cho đặt lại đúng 6 số này.
+export function initialPassword(loginId) {
+  return String(loginId).slice(-6);
 }
 
 export async function createSession(db, kind, subject, ttlSeconds) {
