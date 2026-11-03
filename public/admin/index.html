@@ -1,0 +1,119 @@
+<!doctype html>
+<html lang="vi">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="robots" content="noindex, nofollow">
+  <title>Quản lý bảng lương</title>
+  <link rel="icon" href="data:,">
+  <link rel="stylesheet" href="/style.css">
+  <script src="/vendor/xlsx.full.min.js" defer></script>
+  <script type="module" src="/admin/admin.js"></script>
+</head>
+<body>
+  <main class="wrap wide">
+    <p id="loading" class="muted">Đang tải…</p>
+
+    <section id="login-view" class="card narrow" hidden>
+      <h2>Đăng nhập admin</h2>
+      <form id="login-form" novalidate>
+        <input type="text" autocomplete="username" value="admin" hidden>
+        <label for="admin-password">Mật khẩu admin</label>
+        <input id="admin-password" type="password" autocomplete="current-password" required>
+        <button class="primary" type="submit">Đăng nhập</button>
+        <p id="login-error" class="error" hidden></p>
+      </form>
+    </section>
+
+    <section id="app-view" hidden>
+      <header class="top">
+        <h1>Quản lý bảng lương</h1>
+        <button id="logout" class="ghost" type="button">Đăng xuất</button>
+      </header>
+
+      <nav class="tabs">
+        <button type="button" data-tab="import" class="active">Nhập bảng lương</button>
+        <button type="button" data-tab="periods">Các kỳ lương</button>
+        <button type="button" data-tab="employees">Nhân viên</button>
+      </nav>
+
+      <!-- Nhập bảng lương -->
+      <div id="tab-import">
+        <div class="card">
+          <h2>1. Chọn kỳ lương và nguồn dữ liệu</h2>
+          <label for="import-period">Tháng lương</label>
+          <input id="import-period" class="w-240" type="month" required>
+
+          <label>Nguồn dữ liệu</label>
+          <div class="source-switch">
+            <label><input type="radio" name="source" value="excel" checked> File Excel / CSV</label>
+            <label><input type="radio" name="source" value="gsheet"> Google Sheet</label>
+          </div>
+
+          <div id="excel-source">
+            <label for="import-file">File bảng lương (.xlsx, .xls, .csv)</label>
+            <input id="import-file" type="file" accept=".xlsx,.xls,.csv">
+            <div id="sheet-wrap" hidden>
+              <label for="import-sheet">Sheet</label>
+              <select id="import-sheet" class="w-320"></select>
+            </div>
+          </div>
+
+          <div id="gsheet-source" hidden>
+            <p id="gsheet-missing" class="notice" hidden>
+              Chưa cấu hình Google service account. Xem mục “Google Sheet” trong README để bật tính năng này,
+              hoặc tải Google Sheet về dạng .xlsx (Tệp → Tải xuống) rồi dùng tuỳ chọn File Excel.
+            </p>
+            <div id="gsheet-ready" hidden>
+              <p class="muted">Share Google Sheet (quyền <b>Người xem</b>) cho email:<br><span id="gsheet-email" class="code"></span></p>
+              <label for="import-url">Link Google Sheet (mở đúng tab cần nhập rồi copy link)</label>
+              <input id="import-url" type="url" placeholder="https://docs.google.com/spreadsheets/d/…">
+            </div>
+          </div>
+
+          <p class="muted">
+            File cần có một dòng tiêu đề, trong đó có cột <b>SĐT</b> (hoặc “Số điện thoại”) và <b>Họ tên</b>.
+            Mọi cột còn lại sẽ hiện cho nhân viên, trừ cột “STT” và cột có tiêu đề bắt đầu bằng <b>#</b> (cột nội bộ).
+          </p>
+          <button id="check-btn" class="primary w-240" type="button">Kiểm tra dữ liệu</button>
+          <p id="import-error" class="error" hidden></p>
+        </div>
+
+        <div id="summary-card" class="card" hidden>
+          <h2>2. Kiểm tra trước khi nhập</h2>
+          <div id="summary"></div>
+          <div class="row-actions">
+            <button id="confirm-btn" class="primary" type="button">Xác nhận nhập</button>
+          </div>
+          <p id="confirm-error" class="error" hidden></p>
+        </div>
+
+        <div id="result-card" class="card" hidden>
+          <h2>3. Đã nhập xong</h2>
+          <div id="result"></div>
+        </div>
+      </div>
+
+      <!-- Kỳ lương -->
+      <div id="tab-periods" hidden>
+        <div class="card">
+          <h2>Các kỳ lương đã nhập</h2>
+          <div class="table-scroll"><table id="periods-table"></table></div>
+          <p id="periods-error" class="error" hidden></p>
+        </div>
+      </div>
+
+      <!-- Nhân viên -->
+      <div id="tab-employees" hidden>
+        <div id="code-card" class="card" hidden></div>
+        <div class="card">
+          <h2>Nhân viên</h2>
+          <input id="employee-search" class="w-320" type="search" placeholder="Tìm theo tên hoặc SĐT">
+          <div class="table-scroll mt-12"><table id="employees-table"></table></div>
+          <p id="employees-error" class="error" hidden></p>
+        </div>
+      </div>
+    </section>
+  </main>
+</body>
+</html>

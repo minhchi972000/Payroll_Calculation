@@ -1,0 +1,82 @@
+<!doctype html>
+<html lang="vi">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="robots" content="noindex, nofollow">
+  <title>Bảng lương</title>
+  <link rel="icon" href="data:,">
+  <link rel="stylesheet" href="/style.css">
+  <script type="module" src="/app.js"></script>
+</head>
+<body>
+  <main class="wrap">
+    <p id="loading" class="muted">Đang tải…</p>
+
+    <section id="login-view" class="card" hidden>
+      <h2>Xem bảng lương</h2>
+      <p class="muted">Đăng nhập bằng số điện thoại của bạn. Lần đầu tiên, dùng mã 8 số admin đã gửi.</p>
+      <form id="login-form" novalidate>
+        <label for="login-phone">Số điện thoại</label>
+        <input id="login-phone" type="tel" inputmode="tel" autocomplete="username" placeholder="0901 234 567" required>
+        <label for="login-password">Mật khẩu hoặc mã đăng nhập</label>
+        <input id="login-password" type="password" autocomplete="current-password" required>
+        <button class="primary" type="submit">Đăng nhập</button>
+        <p id="login-error" class="error" hidden></p>
+      </form>
+      <p class="muted">Quên mật khẩu? Liên hệ admin để được cấp mã mới.</p>
+    </section>
+
+    <section id="change-view" class="card" hidden>
+      <h2 id="change-title">Đặt mật khẩu mới</h2>
+      <p id="change-intro" class="muted">Đây là lần đầu bạn đăng nhập. Hãy đặt mật khẩu riêng để dùng cho các lần sau.</p>
+      <form id="change-form" novalidate>
+        <input id="change-username" type="text" autocomplete="username" hidden>
+        <div id="change-current-wrap">
+          <label for="change-current">Mật khẩu hiện tại</label>
+          <input id="change-current" type="password" autocomplete="current-password">
+        </div>
+        <label for="change-new">Mật khẩu mới (ít nhất 6 ký tự)</label>
+        <input id="change-new" type="password" autocomplete="new-password" minlength="6" required>
+        <label for="change-confirm">Nhập lại mật khẩu mới</label>
+        <input id="change-confirm" type="password" autocomplete="new-password" required>
+        <button class="primary" type="submit">Lưu mật khẩu</button>
+        <p id="change-error" class="error" hidden></p>
+      </form>
+      <p><button id="change-cancel" class="link" type="button" hidden>Quay lại bảng lương</button></p>
+    </section>
+
+    <section id="payslip-view" hidden>
+      <header class="top">
+        <h1>Bảng lương</h1>
+        <button id="logout" class="ghost" type="button">Đăng xuất</button>
+      </header>
+
+      <div class="card">
+        <div class="payslip-head">
+          <div>
+            <div id="emp-name" class="name"></div>
+            <div id="emp-phone" class="muted"></div>
+          </div>
+        </div>
+        <div id="period-wrap">
+          <label for="period">Kỳ lương</label>
+          <select id="period"></select>
+        </div>
+        <p id="no-payslip" class="notice" hidden>Chưa có bảng lương nào cho bạn.</p>
+      </div>
+
+      <div id="payslip-card" class="card" hidden>
+        <div id="net" class="net" hidden>
+          <div id="net-label" class="label"></div>
+          <div id="net-value" class="value"></div>
+        </div>
+        <dl id="items" class="items"></dl>
+        <p id="payslip-error" class="error" hidden></p>
+      </div>
+
+      <p><button id="open-change" class="link" type="button">Đổi mật khẩu</button></p>
+    </section>
+  </main>
+</body>
+</html>
