@@ -1,18 +1,8 @@
-import { api, el, formatPeriod, formatValue, hidePasswords, initPasswordToggles, netPayIndex, normalizeLabel, showError } from './common.js';
+import { api, el, formatPeriod, hidePasswords, initPasswordToggles, showError } from './common.js';
+import { buildPayslip, money, zeroToggleText } from './payslip.js';
 
 const $ = (id) => document.getElementById(id);
 const views = ['loading', 'login-view', 'payslip-view'];
-// Chia mục lương thành nhóm theo tên cột, chỉ để hiển thị cho dễ đọc
-const WORK_TIME = /ngay cong|nghi phep|phep nam|xin phep|^gio |so ngay|so gio/;
-const DEDUCTION = /^(tru|khau tru|phi )|bhxh|bhyt|bhtn|bao hiem|cong doan|thue|tam ung|truy thu|phat/;
-// Khoản được nhận dù tên có chữ của khoản trừ, ví dụ "Phụ cấp BHXH", "Tiền tăng ca"
-const INCOME_PREFIX = /^(tien|luong|phu cap|ho tro|thuong)/;
-const GROUPS = [
-  { key: 'time', title: 'Ngày công & giờ làm' },
-  { key: 'income', title: 'Lương & phụ cấp' },
-  { key: 'deduction', title: 'Các khoản trừ' },
-];
-
 let profile = null;
 let payslip = null;
 let showZero = false;
@@ -104,74 +94,19 @@ $('toggle-zero').addEventListener('click', () => {
   renderPayslip();
 });
 
-function classify(item) {
-  const label = normalizeLabel(item.label);
-  if (typeof item.value === 'string' && item.value !== '') return 'info';
-  if (INCOME_PREFIX.test(label)) return 'income';
-  // Ngày, giờ không bao giờ tới 1.000; số lớn hơn là tiền
-  if (WORK_TIME.test(label) && !(Math.abs(item.value) >= 1000)) return 'time';
-  if (DEDUCTION.test(label)) return 'deduction';
-  return 'income';
-}
-
-const isZero = (item) => item.value === 0 || item.value === '';
-
-function money(value) {
-  return typeof value === 'number' ? `${formatValue(value)} đ` : formatValue(value);
-}
-
-function renderGroup(group, items) {
-  if (group.key === 'time') {
-    return el(
-      'section',
-      { class: 'group' },
-      el('h3', {}, group.title),
-      el('dl', { class: 'tiles' }, items.map((item) => el('div', {}, el('dt', {}, item.label), el('dd', {}, formatValue(item.value))))),
-    );
-  }
-  const deduction = group.key === 'deduction';
-  return el(
-    'section',
-    { class: `group ${group.key}` },
-    el('h3', {}, group.title),
-    el(
-      'dl',
-      { class: 'items' },
-      items.map((item) => {
-        const negative = typeof item.value === 'number' && (item.value < 0 || (deduction && item.value !== 0));
-        const value = deduction && typeof item.value === 'number' && item.value !== 0 ? `−${formatValue(Math.abs(item.value))}` : formatValue(item.value);
-        return el('div', { class: negative ? 'row negative' : 'row' }, el('dt', {}, item.label), el('dd', {}, value));
-      }),
-    ),
-  );
-}
-
 function renderPayslip() {
   const { items, period } = payslip;
-  const net = items[netPayIndex(items.map((item) => item.label))];
+  const { net, info, groups, hiddenCount } = buildPayslip(items, showZero);
   $('net').hidden = !net;
   if (net) {
     $('net-label').textContent = `${net.label} · ${formatPeriod(period)}`;
     $('net-value').textContent = money(net.value);
   }
-
   // Mục dạng chữ (chức vụ, bộ phận…) hiện ngay dưới tên
-  $('emp-info').textContent = items
-    .filter((item) => item !== net && classify(item) === 'info')
-    .map((item) => `${item.label}: ${item.value}`)
-    .join(' · ');
-
-  const rest = items.filter((item) => item !== net && classify(item) !== 'info');
-  const hidden = rest.filter(isZero).length;
-  const shown = showZero ? rest : rest.filter((item) => !isZero(item));
-  $('groups').replaceChildren(
-    ...GROUPS.map((group) => {
-      const groupItems = shown.filter((item) => classify(item) === group.key);
-      return groupItems.length ? renderGroup(group, groupItems) : null;
-    }).filter(Boolean),
-  );
-  $('toggle-zero').hidden = hidden === 0;
-  $('toggle-zero').textContent = showZero ? 'Ẩn các mục bằng 0' : `Hiện thêm ${hidden} mục bằng 0`;
+  $('emp-info').textContent = info;
+  $('groups').replaceChildren(...groups);
+  $('toggle-zero').hidden = hiddenCount === 0;
+  $('toggle-zero').textContent = zeroToggleText(showZero, hiddenCount);
 }
 
 async function loadPayslip(period) {

@@ -1,4 +1,5 @@
-import { api, el, formatDateTime, formatPeriod, formatValue, initPasswordToggles, netPayIndex, showError } from '../common.js';
+import { api, el, formatDateTime, formatPeriod, initPasswordToggles, netPayIndex, showError } from '../common.js';
+import { buildPayslip, money, zeroToggleText } from '../payslip.js';
 
 const $ = (id) => document.getElementById(id);
 
@@ -426,8 +427,6 @@ $('employee-period').addEventListener('change', async () => {
 
 $('employee-search').addEventListener('input', renderEmployees);
 
-const money = (value) => (typeof value === 'number' ? `${formatValue(value)} đ` : formatValue(value));
-
 function renderEmployees() {
   const q = $('employee-search').value.trim().toLowerCase();
   const digits = q.replace(/\D/g, '');
@@ -485,53 +484,83 @@ function renderEmployees() {
   asCards(table);
 }
 
-// Xem chi tiết phiếu lương của một nhân viên theo từng tháng (chỉ xem; muốn sửa thì sửa file Excel rồi nhập lại)
+// "Xem phiếu": hiện phiếu lương của nhân viên y hệt trang nhân viên (dùng chung payslip.js), đổi được tháng
 async function showPayslipDetail(employee) {
-  const card = $('detail-card');
-  const who = employee.name || employee.login_id;
-  const head = el('div', { class: 'detail-head' }, el('h2', {}, `Phiếu lương: ${who}`), el('span', { class: 'muted' }, `CCCD ${employee.login_id}`));
-  const closeButton = el('button', { class: 'ghost', type: 'button', onclick: () => (card.hidden = true) }, 'Đóng');
-  card.hidden = false;
-  card.replaceChildren(head, el('p', { class: 'muted' }, 'Đang tải…'));
-  card.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  const panel = $('detail-card');
+  const closeButton = el('button', { class: 'ghost', type: 'button', onclick: () => (panel.hidden = true) }, 'Đóng');
+  const bar = el('div', { class: 'detail-bar' }, el('h2', {}, 'Xem phiếu lương'), closeButton);
+  const message = (cls, text) => el('div', { class: 'card' }, el('p', { class: cls }, text));
+  panel.hidden = false;
+  panel.replaceChildren(bar, message('muted', 'Đang tải…'));
+  panel.scrollIntoView({ behavior: 'smooth', block: 'start' });
 
   let payslips;
   try {
     ({ payslips } = await api(`/api/admin/employees/${employee.login_id}/payslips`));
   } catch (err) {
     if (err.status === 401) return goToLogin();
-    card.replaceChildren(head, el('p', { class: 'error' }, err.message), closeButton);
+    panel.replaceChildren(bar, message('error', err.message));
     return;
   }
   if (!payslips.length) {
-    card.replaceChildren(head, el('p', { class: 'notice' }, 'Người này chưa có phiếu lương nào.'), closeButton);
+    panel.replaceChildren(bar, message('notice', `${employee.name || employee.login_id} chưa có phiếu lương nào.`));
     return;
   }
 
+  let current = payslips.find((p) => p.period === employeePeriod) || payslips[0];
+  let showZero = false;
   const periodSelect = el(
     'select',
-    { class: 'w-240', onchange: () => render(payslips.find((p) => p.period === periodSelect.value)) },
+    {
+      onchange: () => {
+        current = payslips.find((p) => p.period === periodSelect.value);
+        render();
+      },
+    },
     payslips.map((p) => el('option', { value: p.period }, formatPeriod(p.period))),
   );
 
-  function render(current) {
+  function render() {
     periodSelect.value = current.period;
-    const net = netPayIndex(current.columns);
-    const rows = current.columns.map((label, i) =>
-      el('tr', { class: i === net ? 'net-row' : '' }, el('th', {}, label), el('td', { class: 'num' }, formatValue(current.values[i]))),
-    );
-    card.replaceChildren(
-      head,
-      el('label', {}, 'Kỳ lương'),
-      periodSelect,
-      net !== -1
-        ? el('div', { class: 'net mt-12' }, el('div', { class: 'label' }, `${current.columns[net]} · ${formatPeriod(current.period)}`), el('div', { class: 'value' }, money(current.values[net])))
-        : null,
-      el('div', { class: 'table-scroll mt-12' }, el('table', { class: 'detail' }, el('tbody', {}, rows))),
-      el('div', { class: 'row-actions' }, closeButton),
+    const items = current.columns.map((label, i) => ({ label, value: current.values[i] ?? '' }));
+    const { net, info, groups, hiddenCount } = buildPayslip(items, showZero);
+    const toggle = hiddenCount
+      ? el('button', { class: 'link more', type: 'button', onclick: () => ((showZero = !showZero), render()) }, zeroToggleText(showZero, hiddenCount))
+      : null;
+    panel.replaceChildren(
+      bar,
+      el(
+        'div',
+        { class: 'payslip-layout' },
+        el(
+          'aside',
+          { class: 'payslip-side' },
+          el(
+            'div',
+            { class: 'card' },
+            el(
+              'div',
+              { class: 'payslip-head' },
+              el(
+                'div',
+                {},
+                el('div', { class: 'name' }, current.name || employee.name),
+                el('div', { class: 'muted' }, `Số CCCD: ${employee.login_id}`),
+                info ? el('div', { class: 'muted' }, info) : null,
+              ),
+            ),
+            el('label', {}, 'Kỳ lương'),
+            periodSelect,
+          ),
+          net
+            ? el('div', { class: 'net' }, el('div', { class: 'label' }, `${net.label} · ${formatPeriod(current.period)}`), el('div', { class: 'value' }, money(net.value)))
+            : null,
+        ),
+        el('div', { class: 'card payslip-main' }, ...groups, toggle),
+      ),
     );
   }
-  render(payslips.find((p) => p.period === employeePeriod) || payslips[0]);
+  render();
 }
 
 // Khung đổi mật khẩu nhân viên: admin tự đặt (chọn sẵn), hoặc đưa về 6 số cuối CCCD
