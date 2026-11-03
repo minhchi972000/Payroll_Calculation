@@ -16,7 +16,6 @@ import {
   recordFailure,
   safeEqual,
   sessionCookie,
-  sha256Hex,
   verifyPassword,
 } from './auth.js';
 import { fetchSheetRows, readServiceAccount } from './gsheet.js';
@@ -67,7 +66,7 @@ function checkOrigin(request) {
 async function requireEmployee(request, env) {
   const session = await getSession(env.DB, request, 'employee');
   if (!session) throw new HttpError(401, 'Bạn chưa đăng nhập.');
-  const employee = await env.DB.prepare('SELECT login_id, name, must_change_password FROM employees WHERE login_id = ?')
+  const employee = await env.DB.prepare('SELECT login_id, name FROM employees WHERE login_id = ?')
     .bind(session.subject)
     .first();
   if (!employee) throw new HttpError(401, 'Tài khoản không còn tồn tại.');
@@ -79,17 +78,11 @@ async function requireAdmin(request, env) {
   if (!session) throw new HttpError(401, 'Bạn chưa đăng nhập admin.');
 }
 
-function validatePasswordLength(password) {
+function validatePassword(password) {
   if (typeof password !== 'string' || password.length < MIN_PASSWORD_LENGTH) {
     throw new HttpError(400, `Mật khẩu mới phải có ít nhất ${MIN_PASSWORD_LENGTH} ký tự.`);
   }
   if (password.length > 128) throw new HttpError(400, 'Mật khẩu quá dài.');
-}
-
-// Mật khẩu nhân viên tự đặt
-function validateNewPassword(password, loginId) {
-  validatePasswordLength(password);
-  if (password === initialPassword(loginId)) throw new HttpError(400, 'Mật khẩu mới không được là 6 số cuối số CCCD.');
 }
 
 // ---------- Nhân viên ----------
@@ -112,7 +105,7 @@ async function login(request, env) {
     throw new HttpError(429, 'Bạn đã nhập sai quá nhiều lần. Vui lòng thử lại sau 15 phút.');
   }
 
-  const employee = await env.DB.prepare('SELECT login_id, password_hash, must_change_password FROM employees WHERE login_id = ?')
+  const employee = await env.DB.prepare('SELECT login_id, password_hash FROM employees WHERE login_id = ?')
     .bind(loginId)
     .first();
   if (!employee || !(await verifyPassword(password, employee.password_hash))) {
@@ -126,11 +119,7 @@ async function login(request, env) {
     env.DB.prepare('UPDATE employees SET last_login_at = ? WHERE login_id = ?').bind(now(), loginId),
   ]);
   const token = await createSession(env.DB, 'employee', loginId, EMPLOYEE_SESSION_SECONDS);
-  return json(
-    { mustChangePassword: Boolean(employee.must_change_password) },
-    200,
-    { 'Set-Cookie': sessionCookie(EMPLOYEE_COOKIE, token, EMPLOYEE_SESSION_SECONDS) },
-  );
+  return json({ ok: true }, 200, { 'Set-Cookie': sessionCookie(EMPLOYEE_COOKIE, token, EMPLOYEE_SESSION_SECONDS) });
 }
 
 async function logout(request, env) {
@@ -146,40 +135,12 @@ async function me(request, env) {
   return json({
     loginId: employee.login_id,
     name: employee.name,
-    mustChangePassword: Boolean(employee.must_change_password),
-    periods: employee.must_change_password ? [] : results.map((r) => r.period),
+    periods: results.map((r) => r.period),
   });
-}
-
-async function changePassword(request, env) {
-  const employee = await requireEmployee(request, env);
-  const body = await readJson(request);
-  const row = await env.DB.prepare('SELECT password_hash FROM employees WHERE login_id = ?').bind(employee.login_id).first();
-  if (!(await verifyPassword(String(body.currentPassword ?? ''), row.password_hash))) {
-    throw new HttpError(400, 'Mật khẩu hiện tại không đúng.');
-  }
-  validateNewPassword(body.newPassword, employee.login_id);
-
-  const hash = await hashPassword(body.newPassword);
-  const token = await createSession(env.DB, 'employee', employee.login_id, EMPLOYEE_SESSION_SECONDS);
-  // Đăng xuất mọi thiết bị khác, giữ lại phiên vừa tạo
-  await env.DB.batch([
-    env.DB.prepare('UPDATE employees SET password_hash = ?, must_change_password = 0, updated_at = ? WHERE login_id = ?').bind(
-      hash,
-      now(),
-      employee.login_id,
-    ),
-    env.DB.prepare("DELETE FROM sessions WHERE kind = 'employee' AND subject = ? AND token_hash != ?").bind(
-      employee.login_id,
-      await sha256Hex(token),
-    ),
-  ]);
-  return json({ ok: true }, 200, { 'Set-Cookie': sessionCookie(EMPLOYEE_COOKIE, token, EMPLOYEE_SESSION_SECONDS) });
 }
 
 async function payslip(request, env, url) {
   const employee = await requireEmployee(request, env);
-  if (employee.must_change_password) throw new HttpError(403, 'Bạn cần đổi mật khẩu trước khi xem bảng lương.');
   const period = url.searchParams.get('period');
   if (!isValidPeriod(period)) throw new HttpError(400, 'Kỳ lương không hợp lệ.');
 
@@ -321,7 +282,7 @@ async function adminImport(request, env) {
       newAccounts.push({ loginId: r.loginId, name: r.name });
       statements.push(
         env.DB.prepare(
-          'INSERT INTO employees (login_id, name, password_hash, must_change_password, created_at, updated_at) VALUES (?, ?, ?, 1, ?, ?)',
+          'INSERT INTO employees (login_id, name, password_hash, default_password, created_at, updated_at) VALUES (?, ?, ?, 1, ?, ?)',
         ).bind(r.loginId, r.name, await hashInitialCode(initialPassword(r.loginId)), t, t),
       );
     }
@@ -356,6 +317,41 @@ async function adminExportPeriod(request, env, period) {
   });
 }
 
+// Mọi phiếu lương của một nhân viên (mới nhất trước), để admin xem chi tiết và sửa
+async function adminEmployeePayslips(request, env, loginId) {
+  await requireAdmin(request, env);
+  const { results } = await env.DB.prepare(
+    `SELECT p.period, p.name, p."values" AS vals, d.columns FROM payslips p JOIN periods d ON d.period = p.period
+     WHERE p.login_id = ? ORDER BY p.period DESC`,
+  )
+    .bind(loginId)
+    .all();
+  return json({
+    loginId,
+    payslips: results.map((r) => ({ period: r.period, name: r.name, columns: JSON.parse(r.columns), values: JSON.parse(r.vals) })),
+  });
+}
+
+// Admin sửa giá trị một phiếu lương. Mỗi ô là số, chữ (tối đa 500 ký tự) hoặc để trống; số ô phải khớp số cột của kỳ.
+async function adminUpdatePayslip(request, env, period, loginId) {
+  await requireAdmin(request, env);
+  const body = await readJson(request);
+  const info = await env.DB.prepare('SELECT columns FROM periods WHERE period = ?').bind(period).first();
+  if (!info) throw new HttpError(404, 'Không có kỳ lương này.');
+  const columns = JSON.parse(info.columns);
+  const values = body.values;
+  if (!Array.isArray(values) || values.length !== columns.length) throw new HttpError(400, 'Dữ liệu phiếu lương không khớp số cột.');
+  values.forEach((v, i) => {
+    const ok = (typeof v === 'number' && Number.isFinite(v)) || (typeof v === 'string' && v.length <= 500);
+    if (!ok) throw new HttpError(400, `Giá trị ở mục "${columns[i]}" không hợp lệ.`);
+  });
+  const result = await env.DB.prepare('UPDATE payslips SET "values" = ? WHERE period = ? AND login_id = ?')
+    .bind(JSON.stringify(values), period, loginId)
+    .run();
+  if (!result.meta.changes) throw new HttpError(404, 'Không tìm thấy phiếu lương này.');
+  return json({ ok: true });
+}
+
 async function adminDeletePeriod(request, env, period) {
   await requireAdmin(request, env);
   if (!isValidPeriod(period)) throw new HttpError(400, 'Kỳ lương không hợp lệ.');
@@ -369,33 +365,32 @@ async function adminDeletePeriod(request, env, period) {
 async function adminEmployees(request, env) {
   await requireAdmin(request, env);
   const { results } = await env.DB.prepare(
-    'SELECT login_id, name, must_change_password, last_login_at, created_at FROM employees ORDER BY name COLLATE NOCASE, login_id',
+    'SELECT login_id, name, default_password, last_login_at, created_at FROM employees ORDER BY name COLLATE NOCASE, login_id',
   ).all();
   return json({ employees: results });
 }
 
-// Không gửi mật khẩu: đặt về 6 số cuối CCCD (ai biết CCCD cũng đoán được nên bắt đổi khi đăng nhập).
-// Có mật khẩu: admin tự đặt, nhân viên dùng luôn mật khẩu đó, không phải đổi.
+// Chỉ admin đổi được mật khẩu nhân viên. Không gửi mật khẩu: đưa về mặc định (6 số cuối CCCD).
+// Có mật khẩu: dùng mật khẩu admin đặt.
 async function adminResetPassword(request, env, loginId) {
   await requireAdmin(request, env);
   const employee = await env.DB.prepare('SELECT login_id, name FROM employees WHERE login_id = ?').bind(loginId).first();
   if (!employee) throw new HttpError(404, 'Không tìm thấy nhân viên.');
   const body = (request.headers.get('Content-Type') || '').includes('application/json') ? await readJson(request) : {};
   const custom = body.password !== undefined && body.password !== '';
-  if (custom) validatePasswordLength(body.password);
-  const mustChange = !custom;
+  if (custom) validatePassword(body.password);
   const hash = custom ? await hashPassword(body.password) : await hashInitialCode(initialPassword(loginId));
   await env.DB.batch([
-    env.DB.prepare('UPDATE employees SET password_hash = ?, must_change_password = ?, updated_at = ? WHERE login_id = ?').bind(
+    env.DB.prepare('UPDATE employees SET password_hash = ?, default_password = ?, updated_at = ? WHERE login_id = ?').bind(
       hash,
-      mustChange ? 1 : 0,
+      custom ? 0 : 1,
       now(),
       loginId,
     ),
     env.DB.prepare("DELETE FROM sessions WHERE kind = 'employee' AND subject = ?").bind(loginId),
     env.DB.prepare('DELETE FROM rate_limits WHERE key = ?').bind(`id:${loginId}`),
   ]);
-  return json({ loginId, name: employee.name, custom, mustChange });
+  return json({ loginId, name: employee.name, custom });
 }
 
 async function adminDeleteEmployee(request, env, loginId) {
@@ -418,7 +413,6 @@ async function route(request, env, url) {
   if (pathname === '/api/login' && method === 'POST') return login(request, env);
   if (pathname === '/api/logout' && method === 'POST') return logout(request, env);
   if (pathname === '/api/me' && method === 'GET') return me(request, env);
-  if (pathname === '/api/change-password' && method === 'POST') return changePassword(request, env);
   if (pathname === '/api/payslip' && method === 'GET') return payslip(request, env, url);
 
   if (pathname === '/api/admin/login' && method === 'POST') return adminLogin(request, env);
@@ -435,6 +429,10 @@ async function route(request, env, url) {
   // Tài khoản nhân viên là số CCCD 12 chữ số. Vẫn nhận SĐT 10 số để quản lý tài khoản tạo từ bản cũ.
   m = pathname.match(/^\/api\/admin\/employees\/(0\d{9}|0\d{11})\/reset$/);
   if (m && method === 'POST') return adminResetPassword(request, env, m[1]);
+  m = pathname.match(/^\/api\/admin\/employees\/(0\d{9}|0\d{11})\/payslips$/);
+  if (m && method === 'GET') return adminEmployeePayslips(request, env, m[1]);
+  m = pathname.match(/^\/api\/admin\/payslips\/(\d{4}-\d{2})\/(0\d{9}|0\d{11})$/);
+  if (m && method === 'PUT') return adminUpdatePayslip(request, env, m[1], m[2]);
   m = pathname.match(/^\/api\/admin\/employees\/(0\d{9}|0\d{11})$/);
   if (m && method === 'DELETE') return adminDeleteEmployee(request, env, m[1]);
 

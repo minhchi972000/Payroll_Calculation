@@ -48,8 +48,8 @@ export async function hashPassword(password) {
   return `pbkdf2$${PBKDF2_ITERATIONS}$${salt}$${await pbkdf2(password, salt, PBKDF2_ITERATIONS)}`;
 }
 
-// Mật khẩu ban đầu: dùng SHA-256 cho nhanh, vì một lần nhập có thể tạo hàng trăm tài khoản
-// trong cùng một request. Mật khẩu này bắt buộc phải đổi ở lần đăng nhập đầu tiên.
+// Mật khẩu mặc định (6 số cuối CCCD): dùng SHA-256 cho nhanh, vì một lần nhập có thể tạo hàng trăm
+// tài khoản trong cùng một request. Băm chậm cũng không giúp gì: chỉ có 1 triệu khả năng.
 export async function hashInitialCode(code) {
   const salt = randomSaltHex();
   return `sha256$${salt}$${await sha256Hex(salt + code)}`;
@@ -66,8 +66,8 @@ export async function verifyPassword(password, stored) {
   return false;
 }
 
-// Mật khẩu ban đầu (và khi admin đặt lại) là 6 số cuối số CCCD, admin không phải gửi mã riêng cho từng người.
-// Ai biết CCCD đều đoán được, nên luôn bắt đổi ở lần đăng nhập đầu và không cho đặt lại đúng 6 số này.
+// Mật khẩu mặc định là 6 số cuối số CCCD, admin không phải gửi mã riêng cho từng người.
+// Ai biết CCCD đều đoán được; muốn an toàn hơn thì admin đặt mật khẩu riêng ở tab Nhân viên.
 export function initialPassword(loginId) {
   return String(loginId).slice(-6);
 }

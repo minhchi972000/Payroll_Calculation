@@ -46,6 +46,14 @@ export function normalizeLabel(text) {
     .toLowerCase();
 }
 
+const NET_PAY = /thuc (linh|lanh|nhan)|luong net|net pay|so tien (nhan|thuc nhan)|con (linh|nhan)/;
+
+// Vị trí cột "Thực lãnh" / "Thực nhận" (lấy cột cuối cùng khớp), -1 nếu không có
+export function netPayIndex(labels) {
+  for (let i = labels.length - 1; i >= 0; i--) if (NET_PAY.test(normalizeLabel(labels[i]))) return i;
+  return -1;
+}
+
 // Tạo phần tử DOM; nội dung luôn gán qua textContent nên dữ liệu từ Excel không chèn được HTML
 export function el(tag, props = {}, ...children) {
   const node = document.createElement(tag);

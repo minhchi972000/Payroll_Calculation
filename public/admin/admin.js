@@ -1,4 +1,4 @@
-import { api, el, formatDateTime, formatPeriod, hidePasswords, initPasswordToggles, showError } from '../common.js';
+import { api, el, formatDateTime, formatPeriod, formatValue, hidePasswords, initPasswordToggles, netPayIndex, showError } from '../common.js';
 
 const $ = (id) => document.getElementById(id);
 
@@ -247,12 +247,12 @@ function renderErrors(s) {
   $('summary-card').hidden = false;
 }
 
-// Tin nhắn chung gửi cả nhóm (Zalo): mật khẩu ban đầu là 6 số cuối CCCD nên không cần gửi riêng
+// Tin nhắn chung gửi cả nhóm (Zalo): mật khẩu mặc định là 6 số cuối CCCD nên không cần gửi riêng
 function loginMessage() {
   return [
     `Bảng lương xem tại: ${location.origin}`,
     'Đăng nhập bằng số CCCD (đủ 12 số).',
-    'Mật khẩu lần đầu: 6 số cuối số CCCD của bạn. Sau đó hệ thống sẽ yêu cầu đặt mật khẩu riêng.',
+    'Mật khẩu: 6 số cuối số CCCD của bạn. Quên mật khẩu thì liên hệ admin.',
   ].join('\n');
 }
 
@@ -295,7 +295,7 @@ function renderResult(r) {
       el(
         'p',
         { class: 'notice' },
-        `Có ${r.newAccounts.length} nhân viên mới. Mật khẩu lần đầu của mỗi người là `,
+        `Có ${r.newAccounts.length} nhân viên mới. Mật khẩu của mỗi người là `,
         el('b', {}, '6 số cuối số CCCD'),
         '. Gửi tin nhắn hướng dẫn dưới đây vào nhóm Zalo của công ty.',
       ),
@@ -402,29 +402,82 @@ async function deletePeriod(period) {
 
 // ---------- Nhân viên ----------
 
+// Lọc theo tháng: '' là tất cả nhân viên; 'YYYY-MM' là chỉ người có phiếu lương tháng đó (kèm cột Thực lãnh)
+let employeePeriod = '';
+let periodSlips = null; // { net, byId: Map(CCCD -> values) } của tháng đang lọc
+
 async function loadEmployees() {
   showError($('employees-error'), null);
   try {
-    ({ employees } = await api('/api/admin/employees'));
+    const [list, { periods }] = await Promise.all([api('/api/admin/employees'), api('/api/admin/periods')]);
+    employees = list.employees;
+    const months = periods.map((p) => p.period);
+    if (!months.includes(employeePeriod)) employeePeriod = '';
+    $('employee-period').replaceChildren(
+      el('option', { value: '' }, 'Tất cả nhân viên'),
+      ...months.map((p) => el('option', { value: p }, formatPeriod(p))),
+    );
+    $('employee-period').value = employeePeriod;
+    await loadPeriodSlips();
     renderEmployees();
   } catch (err) {
     handleAuthError(err, $('employees-error'));
   }
 }
 
+async function loadPeriodSlips() {
+  periodSlips = null;
+  if (!employeePeriod) return;
+  const { columns, rows } = await api(`/api/admin/periods/${employeePeriod}/export`);
+  periodSlips = { net: netPayIndex(columns), byId: new Map(rows.map((r) => [r.loginId, r.values])) };
+}
+
+$('employee-period').addEventListener('change', async () => {
+  employeePeriod = $('employee-period').value;
+  showError($('employees-error'), null);
+  try {
+    await loadPeriodSlips();
+    renderEmployees();
+  } catch (err) {
+    handleAuthError(err, $('employees-error'));
+  }
+});
+
 $('employee-search').addEventListener('input', renderEmployees);
+
+const money = (value) => (typeof value === 'number' ? `${formatValue(value)} đ` : formatValue(value));
 
 function renderEmployees() {
   const q = $('employee-search').value.trim().toLowerCase();
   const digits = q.replace(/\D/g, '');
-  const list = employees.filter((e) => !q || e.name.toLowerCase().includes(q) || (digits && e.login_id.includes(digits)));
+  const list = employees.filter(
+    (e) =>
+      (!periodSlips || periodSlips.byId.has(e.login_id)) &&
+      (!q || e.name.toLowerCase().includes(q) || (digits && e.login_id.includes(digits))),
+  );
+  const showNet = periodSlips && periodSlips.net !== -1;
+  $('employee-count').textContent = `${list.length} người`;
   const table = $('employees-table');
   if (!list.length) {
-    table.replaceChildren(el('tbody', {}, el('tr', {}, el('td', { class: 'muted' }, employees.length ? 'Không tìm thấy.' : 'Chưa có nhân viên. Nhập bảng lương để tạo tài khoản.'))));
+    const empty = !employees.length ? 'Chưa có nhân viên. Nhập bảng lương để tạo tài khoản.' : q ? 'Không tìm thấy.' : 'Không có ai trong tháng này.';
+    table.replaceChildren(el('tbody', {}, el('tr', {}, el('td', { class: 'muted' }, empty))));
     return;
   }
   table.replaceChildren(
-    el('thead', {}, el('tr', {}, el('th', {}, 'Họ tên'), el('th', {}, 'Số CCCD'), el('th', {}, 'Trạng thái'), el('th', {}, 'Đăng nhập gần nhất'), el('th', {}, ''))),
+    el(
+      'thead',
+      {},
+      el(
+        'tr',
+        {},
+        el('th', {}, 'Họ tên'),
+        el('th', {}, 'Số CCCD'),
+        showNet ? el('th', { class: 'num' }, `Thực lãnh ${formatPeriod(employeePeriod).toLowerCase()}`) : null,
+        el('th', {}, 'Mật khẩu'),
+        el('th', {}, 'Đăng nhập gần nhất'),
+        el('th', {}, ''),
+      ),
+    ),
     el(
       'tbody',
       {},
@@ -434,11 +487,13 @@ function renderEmployees() {
           {},
           el('td', {}, e.name || '—'),
           el('td', {}, e.login_id),
-          el('td', {}, e.must_change_password ? el('span', { class: 'tag' }, 'Chưa kích hoạt') : el('span', { class: 'tag ok' }, 'Đã đặt mật khẩu')),
+          showNet ? el('td', { class: 'num' }, money(periodSlips.byId.get(e.login_id)[periodSlips.net])) : null,
+          el('td', {}, e.default_password ? el('span', { class: 'tag' }, '6 số cuối CCCD') : el('span', { class: 'tag ok' }, 'Admin đã đặt')),
           el('td', {}, formatDateTime(e.last_login_at)),
           el(
             'td',
             { class: 'actions' },
+            el('button', { class: 'ghost', type: 'button', onclick: () => showPayslipDetail(e) }, 'Xem phiếu'),
             el('button', { class: 'ghost', type: 'button', onclick: () => resetPassword(e) }, 'Đổi mật khẩu'),
             el('button', { class: 'danger', type: 'button', onclick: () => deleteEmployee(e) }, 'Xoá'),
           ),
@@ -447,6 +502,138 @@ function renderEmployees() {
     ),
   );
   asCards(table);
+}
+
+// Ô số gõ theo kiểu Việt Nam: "1.234.567" hoặc "12,5". Không phải số thì giữ nguyên chữ.
+function parseCellInput(text) {
+  const t = text.trim();
+  if (t === '') return '';
+  if (/^-?[\d.\s]+(,\d+)?$/.test(t)) {
+    const n = Number(t.replace(/[.\s]/g, '').replace(',', '.'));
+    if (Number.isFinite(n)) return n;
+  }
+  return t;
+}
+
+// Xem chi tiết phiếu lương của một nhân viên theo từng tháng; admin bấm "Chỉnh sửa" để sửa từng ô
+async function showPayslipDetail(employee) {
+  const card = $('detail-card');
+  const who = employee.name || employee.login_id;
+  const head = el('div', { class: 'detail-head' }, el('h2', {}, `Phiếu lương: ${who}`), el('span', { class: 'muted' }, `CCCD ${employee.login_id}`));
+  const closeButton = () => el('button', { class: 'ghost', type: 'button', onclick: () => (card.hidden = true) }, 'Đóng');
+  card.hidden = false;
+  card.replaceChildren(head, el('p', { class: 'muted' }, 'Đang tải…'));
+  card.scrollIntoView({ behavior: 'smooth', block: 'start' });
+
+  let payslips;
+  try {
+    ({ payslips } = await api(`/api/admin/employees/${employee.login_id}/payslips`));
+  } catch (err) {
+    if (err.status === 401) return show('login-view');
+    card.replaceChildren(head, el('p', { class: 'error' }, err.message), closeButton());
+    return;
+  }
+  if (!payslips.length) {
+    card.replaceChildren(head, el('p', { class: 'notice' }, 'Người này chưa có phiếu lương nào.'), closeButton());
+    return;
+  }
+
+  let current = payslips.find((p) => p.period === employeePeriod) || payslips[0];
+  let editing = false;
+  let saved = false;
+
+  function render() {
+    const net = netPayIndex(current.columns);
+    const inputs = [];
+    const error = el('p', { class: 'error', hidden: true });
+
+    async function save(event) {
+      event.preventDefault();
+      const values = inputs.map((input) => parseCellInput(input.value));
+      const wrong = values.findIndex((v, i) => typeof current.values[i] === 'number' && typeof v === 'string' && v !== '');
+      if (wrong !== -1) return showError(error, new Error(`"${current.columns[wrong]}" phải là số, ví dụ 1.250.000`));
+      const button = event.submitter;
+      button.disabled = true;
+      try {
+        await api(`/api/admin/payslips/${current.period}/${employee.login_id}`, { method: 'PUT', body: { values } });
+        current.values = values;
+        if (periodSlips && current.period === employeePeriod) periodSlips.byId.set(employee.login_id, values);
+        editing = false;
+        saved = true;
+        render();
+        renderEmployees();
+      } catch (err) {
+        button.disabled = false;
+        if (err.status === 401) return show('login-view');
+        showError(error, err);
+      }
+    }
+
+    const rows = current.columns.map((label, i) => {
+      const value = current.values[i];
+      let cell;
+      if (editing) {
+        const input = el('input', {
+          type: 'text',
+          value: typeof value === 'number' ? formatValue(value) : value,
+          inputMode: typeof value === 'number' ? 'decimal' : 'text',
+          'aria-label': label,
+        });
+        inputs.push(input);
+        cell = el('td', {}, input);
+      } else {
+        cell = el('td', { class: 'num' }, formatValue(value));
+      }
+      return el('tr', { class: i === net ? 'net-row' : '' }, el('th', {}, label), cell);
+    });
+
+    const periodSelect = el(
+      'select',
+      {
+        class: 'w-240',
+        disabled: editing,
+        onchange: (e) => {
+          current = payslips.find((p) => p.period === e.target.value);
+          saved = false;
+          render();
+        },
+      },
+      payslips.map((p) => el('option', { value: p.period }, formatPeriod(p.period))),
+    );
+    periodSelect.value = current.period;
+
+    card.replaceChildren(
+      el(
+        'form',
+        { onsubmit: save, novalidate: true },
+        head,
+        el('label', {}, 'Kỳ lương'),
+        periodSelect,
+        saved ? el('p', { class: 'success mt-12' }, 'Đã lưu. Nhân viên thấy số mới ngay khi tải lại trang.') : null,
+        !editing && net !== -1
+          ? el('div', { class: 'net mt-12' }, el('div', { class: 'label' }, `${current.columns[net]} · ${formatPeriod(current.period)}`), el('div', { class: 'value' }, money(current.values[net])))
+          : null,
+        editing ? el('p', { class: 'notice mt-12' }, 'Sửa số rồi bấm Lưu. Web không tự tính lại các ô khác (ví dụ Thực lãnh), hãy sửa luôn nếu cần.') : null,
+        el('div', { class: 'table-scroll mt-12' }, el('table', { class: 'detail' }, el('tbody', {}, rows))),
+        error,
+        el(
+          'div',
+          { class: 'row-actions' },
+          editing
+            ? [
+                el('button', { class: 'primary', type: 'submit' }, 'Lưu thay đổi'),
+                el('button', { class: 'ghost', type: 'button', onclick: () => ((editing = false), render()) }, 'Huỷ'),
+              ]
+            : [
+                el('button', { class: 'primary', type: 'button', onclick: () => ((editing = true), (saved = false), render()) }, 'Chỉnh sửa'),
+                closeButton(),
+              ],
+        ),
+      ),
+    );
+    if (editing) inputs[0]?.focus({ preventScroll: true });
+  }
+  render();
 }
 
 // Khung đổi mật khẩu nhân viên: admin tự đặt (chọn sẵn), hoặc đưa về 6 số cuối CCCD
@@ -476,8 +663,8 @@ function resetPassword(employee) {
         body: custom ? { password: input.value } : {},
       });
       const text = result.custom
-        ? `Đã đặt mật khẩu mới cho ${who} (CCCD ${employee.login_id}). Người đó đăng nhập bằng mật khẩu này, không phải đổi.`
-        : `Đã đưa mật khẩu của ${who} (CCCD ${employee.login_id}) về 6 số cuối số CCCD. Lần đăng nhập tới, người đó sẽ phải đặt mật khẩu riêng.`;
+        ? `Đã đặt mật khẩu mới cho ${who} (CCCD ${employee.login_id}). Hãy gửi mật khẩu này cho người đó.`
+        : `Đã đưa mật khẩu của ${who} (CCCD ${employee.login_id}) về 6 số cuối số CCCD.`;
       card.replaceChildren(el('p', { class: 'success' }, text));
       loadEmployees();
     } catch (err) {
@@ -493,9 +680,9 @@ function resetPassword(employee) {
       { onsubmit: save, novalidate: true },
       el('h2', {}, `Đổi mật khẩu: ${who}`),
       el('p', { class: 'muted' }, `Số CCCD ${employee.login_id}. Mật khẩu cũ sẽ không dùng được nữa.`),
-      modeRadio('custom', 'Mật khẩu do admin đặt (nhân viên dùng luôn, không phải đổi)', true),
+      modeRadio('custom', 'Mật khẩu do admin đặt', true),
       customWrap,
-      modeRadio('cccd', 'Đưa về 6 số cuối số CCCD (nhân viên phải đổi khi đăng nhập)', false),
+      modeRadio('cccd', 'Đưa về mặc định: 6 số cuối số CCCD', false),
       el(
         'div',
         { class: 'row-actions' },

@@ -1,8 +1,7 @@
-import { api, el, formatPeriod, formatValue, hidePasswords, initPasswordToggles, normalizeLabel, showError } from './common.js';
+import { api, el, formatPeriod, formatValue, hidePasswords, initPasswordToggles, netPayIndex, normalizeLabel, showError } from './common.js';
 
 const $ = (id) => document.getElementById(id);
-const views = ['loading', 'login-view', 'change-view', 'payslip-view'];
-const NET_PAY = /thuc (linh|lanh|nhan)|luong net|net pay|so tien (nhan|thuc nhan)|con (linh|nhan)/;
+const views = ['loading', 'login-view', 'payslip-view'];
 // Chia mục lương thành nhóm theo tên cột, chỉ để hiển thị cho dễ đọc
 const WORK_TIME = /ngay cong|nghi phep|phep nam|xin phep|^gio |so ngay|so gio/;
 const DEDUCTION = /^(tru|khau tru|phi )|bhxh|bhyt|bhtn|bao hiem|cong doan|thue|tam ung|truy thu|phat/;
@@ -17,8 +16,6 @@ const GROUPS = [
 let profile = null;
 let payslip = null;
 let showZero = false;
-// Mã vừa dùng để đăng nhập, để khỏi bắt nhập lại khi đổi mật khẩu lần đầu
-let lastLoginPassword = '';
 
 function show(view) {
   for (const id of views) $(id).hidden = id !== view;
@@ -35,7 +32,6 @@ async function boot() {
     show('login-view');
     return showError($('login-error'), err);
   }
-  if (profile.mustChangePassword) return showChangePassword(true);
   showPayslips();
 }
 
@@ -69,7 +65,6 @@ $('login-form').addEventListener('submit', async (event) => {
       location.href = '/admin';
       return;
     }
-    lastLoginPassword = password;
     $('login-password').value = '';
     await boot();
   } catch (err) {
@@ -78,44 +73,6 @@ $('login-form').addEventListener('submit', async (event) => {
     button.disabled = false;
   }
 });
-
-function showChangePassword(firstTime) {
-  $('change-title').textContent = firstTime ? 'Đặt mật khẩu mới' : 'Đổi mật khẩu';
-  $('change-intro').hidden = !firstTime;
-  $('change-cancel').hidden = firstTime;
-  $('change-username').value = profile.loginId;
-  $('change-current').value = firstTime ? lastLoginPassword : '';
-  $('change-current-wrap').hidden = firstTime && lastLoginPassword !== '';
-  $('change-new').value = '';
-  $('change-confirm').value = '';
-  showError($('change-error'), null);
-  show('change-view');
-}
-
-$('change-form').addEventListener('submit', async (event) => {
-  event.preventDefault();
-  const button = event.submitter;
-  showError($('change-error'), null);
-  if ($('change-new').value !== $('change-confirm').value) {
-    return showError($('change-error'), new Error('Hai mật khẩu mới không giống nhau.'));
-  }
-  button.disabled = true;
-  try {
-    await api('/api/change-password', {
-      method: 'POST',
-      body: { currentPassword: $('change-current').value, newPassword: $('change-new').value },
-    });
-    lastLoginPassword = '';
-    await boot();
-  } catch (err) {
-    showError($('change-error'), err);
-  } finally {
-    button.disabled = false;
-  }
-});
-
-$('change-cancel').addEventListener('click', () => show('payslip-view'));
-$('open-change').addEventListener('click', () => showChangePassword(false));
 
 $('logout').addEventListener('click', async () => {
   await api('/api/logout', { method: 'POST' }).catch(() => {});
@@ -189,7 +146,7 @@ function renderGroup(group, items) {
 
 function renderPayslip() {
   const { items, period } = payslip;
-  const net = [...items].reverse().find((item) => NET_PAY.test(normalizeLabel(item.label)));
+  const net = items[netPayIndex(items.map((item) => item.label))];
   $('net').hidden = !net;
   if (net) {
     $('net-label').textContent = `${net.label} · ${formatPeriod(period)}`;

@@ -113,9 +113,14 @@
       <!-- Nhân viên -->
       <div id="tab-employees" hidden>
         <div id="code-card" class="card" hidden></div>
+        <div id="detail-card" class="card" hidden></div>
         <div class="card">
           <h2>Nhân viên</h2>
-          <input id="employee-search" class="w-320" type="search" placeholder="Tìm theo tên hoặc số CCCD">
+          <div class="filters">
+            <select id="employee-period" aria-label="Lọc theo tháng"><option value="">Tất cả nhân viên</option></select>
+            <input id="employee-search" type="search" placeholder="Tìm theo tên hoặc số CCCD">
+            <span id="employee-count" class="muted"></span>
+          </div>
           <div class="table-scroll mt-12"><table id="employees-table"></table></div>
           <p id="employees-error" class="error" hidden></p>
         </div>

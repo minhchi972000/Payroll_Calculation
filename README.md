@@ -42,15 +42,15 @@ Muốn dùng tên miền riêng (ví dụ `luong.congty.vn`): Cloudflare dashboa
 2. Bấm **Nhập bảng lương**. File hợp lệ thì nhập luôn, nhân viên xem được ngay.
    File có lỗi (CCCD sai, trùng…) thì không nhập gì, web hiện danh sách lỗi để sửa.
    Tháng đã có bảng lương thì web hỏi lại trước khi thay thế.
-3. Nếu có nhân viên mới, hệ thống tạo tài khoản với **mật khẩu lần đầu là 6 số cuối số CCCD**.
+3. Nếu có nhân viên mới, hệ thống tạo tài khoản với **mật khẩu mặc định là 6 số cuối số CCCD**.
    Bấm **Sao chép tin nhắn** rồi gửi một tin hướng dẫn chung vào nhóm Zalo, không cần gửi riêng từng người.
 
-Nhân viên đăng nhập lần đầu bằng số CCCD + 6 số cuối CCCD, sau đó bắt buộc đặt mật khẩu riêng
-(không được dùng lại 6 số cuối CCCD). Quên mật khẩu: admin vào tab **Nhân viên** → **Đổi mật khẩu**, tự đặt
-mật khẩu mới (có thể bắt hoặc không bắt nhân viên đổi lại) hoặc đưa về 6 số cuối CCCD.
+Nhân viên đăng nhập bằng số CCCD + mật khẩu và **không tự đổi được mật khẩu**; chỉ admin đổi.
+Muốn đặt mật khẩu riêng cho ai: admin vào tab **Nhân viên** → **Đổi mật khẩu**, gõ mật khẩu mới rồi gửi cho người đó
+(hoặc chọn đưa về mặc định 6 số cuối CCCD). Cột **Mật khẩu** trong danh sách cho biết ai còn dùng mặc định.
 
-Lưu ý: số CCCD không phải bí mật. Ai biết CCCD của một người **chưa đăng nhập lần nào** thì đăng nhập được thay họ.
-Nên nhắc nhân viên đăng nhập và đổi mật khẩu sớm sau khi có bảng lương.
+Lưu ý: số CCCD không phải bí mật. Ai biết CCCD của một người còn dùng mật khẩu mặc định thì xem được lương của họ.
+Mật khẩu mặc định dùng mãi cho đến khi admin đổi, nên với người cần giữ kín lương hơn, admin hãy đặt mật khẩu riêng.
 
 Nhập lại cùng một tháng sẽ **thay thế** toàn bộ dữ liệu cũ của tháng đó (dùng khi sửa sai).
 
@@ -138,7 +138,7 @@ npm test
 - Phiếu lương luôn được lọc theo số CCCD trong phiên đăng nhập ở server, không theo tham số từ trình duyệt.
 - Mật khẩu nhân viên được băm (PBKDF2). Phiên đăng nhập là cookie HttpOnly, chỉ lưu bản băm trong database.
 - Sai 5 lần với cùng một tài khoản thì khoá 15 phút. Admin bấm "Đổi mật khẩu" sẽ mở khoá ngay.
-- Nhân viên hoặc admin đổi mật khẩu sẽ đăng xuất người đó khỏi mọi thiết bị khác.
+- Admin đổi mật khẩu của ai thì người đó bị đăng xuất khỏi mọi thiết bị.
 - Admin đăng nhập bằng một tài khoản chung (`ADMIN_USERNAME` + `ADMIN_PASSWORD`), phiên admin hết hạn sau 8 giờ.
   Sai 5 lần từ cùng một máy thì khoá 15 phút.
   Đổi tài khoản hoặc mật khẩu admin: chạy lại `npx wrangler secret put ADMIN_USERNAME` / `ADMIN_PASSWORD`.

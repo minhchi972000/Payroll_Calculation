@@ -15,7 +15,7 @@
 
     <section id="login-view" class="card narrow" hidden>
       <h2>Xem bảng lương</h2>
-      <p class="muted">Đăng nhập bằng số CCCD (đủ 12 số trên thẻ căn cước) của bạn. Lần đầu tiên, mật khẩu là <b>6 số cuối số CCCD</b>.</p>
+      <p class="muted">Đăng nhập bằng số CCCD (đủ 12 số trên thẻ căn cước) của bạn. Mật khẩu là <b>6 số cuối số CCCD</b>, hoặc mật khẩu admin đã gửi cho bạn.</p>
       <form id="login-form" novalidate>
         <label for="login-id">Số CCCD</label>
         <input id="login-id" type="text" inputmode="numeric" pattern="[0-9]{12}" autocomplete="username"
@@ -29,35 +29,7 @@
         <button class="primary" type="submit">Đăng nhập</button>
         <p id="login-error" class="error" hidden></p>
       </form>
-      <p class="muted">Quên mật khẩu? Liên hệ admin để đặt lại về 6 số cuối CCCD.</p>
-    </section>
-
-    <section id="change-view" class="card narrow" hidden>
-      <h2 id="change-title">Đặt mật khẩu mới</h2>
-      <p id="change-intro" class="muted">Đây là lần đầu bạn đăng nhập. Hãy đặt mật khẩu riêng (không dùng 6 số cuối CCCD) để dùng cho các lần sau.</p>
-      <form id="change-form" novalidate>
-        <input id="change-username" type="text" autocomplete="username" hidden>
-        <div id="change-current-wrap">
-          <label for="change-current">Mật khẩu hiện tại</label>
-          <div class="password">
-            <input id="change-current" type="password" autocomplete="current-password">
-            <button type="button" aria-label="Hiện mật khẩu" aria-pressed="false">Hiện</button>
-          </div>
-        </div>
-        <label for="change-new">Mật khẩu mới (ít nhất 6 ký tự)</label>
-        <div class="password">
-          <input id="change-new" type="password" autocomplete="new-password" minlength="6" required>
-          <button type="button" aria-label="Hiện mật khẩu" aria-pressed="false">Hiện</button>
-        </div>
-        <label for="change-confirm">Nhập lại mật khẩu mới</label>
-        <div class="password">
-          <input id="change-confirm" type="password" autocomplete="new-password" required>
-          <button type="button" aria-label="Hiện mật khẩu" aria-pressed="false">Hiện</button>
-        </div>
-        <button class="primary" type="submit">Lưu mật khẩu</button>
-        <p id="change-error" class="error" hidden></p>
-      </form>
-      <p><button id="change-cancel" class="link" type="button" hidden>Quay lại bảng lương</button></p>
+      <p class="muted">Quên mật khẩu? Liên hệ admin.</p>
     </section>
 
     <section id="payslip-view" hidden>
@@ -96,7 +68,6 @@
         </div>
       </div>
 
-      <p><button id="open-change" class="link" type="button">Đổi mật khẩu</button></p>
     </section>
   </main>
 </body>
