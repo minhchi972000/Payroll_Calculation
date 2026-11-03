@@ -45,8 +45,8 @@ Muốn dùng tên miền riêng (ví dụ `luong.congty.vn`): Cloudflare dashboa
    Bấm **Sao chép tin nhắn** rồi gửi một tin hướng dẫn chung vào nhóm Zalo, không cần gửi riêng từng người.
 
 Nhân viên đăng nhập lần đầu bằng số CCCD + 6 số cuối CCCD, sau đó bắt buộc đặt mật khẩu riêng
-(không được dùng lại 6 số cuối CCCD). Quên mật khẩu: admin vào tab **Nhân viên** → **Đặt lại mật khẩu**
-(về 6 số cuối CCCD).
+(không được dùng lại 6 số cuối CCCD). Quên mật khẩu: admin vào tab **Nhân viên** → **Đổi mật khẩu**, tự đặt
+mật khẩu mới (có thể bắt hoặc không bắt nhân viên đổi lại) hoặc đưa về 6 số cuối CCCD.
 
 Lưu ý: số CCCD không phải bí mật. Ai biết CCCD của một người **chưa đăng nhập lần nào** thì đăng nhập được thay họ.
 Nên nhắc nhân viên đăng nhập và đổi mật khẩu sớm sau khi có bảng lương.
@@ -136,8 +136,8 @@ npm test
 
 - Phiếu lương luôn được lọc theo số CCCD trong phiên đăng nhập ở server, không theo tham số từ trình duyệt.
 - Mật khẩu nhân viên được băm (PBKDF2). Phiên đăng nhập là cookie HttpOnly, chỉ lưu bản băm trong database.
-- Sai 5 lần với cùng một tài khoản thì khoá 15 phút. Admin bấm "Đặt lại mật khẩu" sẽ mở khoá ngay.
-- Đổi mật khẩu hoặc đặt lại mật khẩu sẽ đăng xuất người đó khỏi mọi thiết bị khác.
+- Sai 5 lần với cùng một tài khoản thì khoá 15 phút. Admin bấm "Đổi mật khẩu" sẽ mở khoá ngay.
+- Nhân viên hoặc admin đổi mật khẩu sẽ đăng xuất người đó khỏi mọi thiết bị khác.
 - Admin đăng nhập bằng một tài khoản chung (`ADMIN_USERNAME` + `ADMIN_PASSWORD`), phiên admin hết hạn sau 8 giờ.
   Sai 5 lần từ cùng một máy thì khoá 15 phút.
   Đổi tài khoản hoặc mật khẩu admin: chạy lại `npx wrangler secret put ADMIN_USERNAME` / `ADMIN_PASSWORD`.

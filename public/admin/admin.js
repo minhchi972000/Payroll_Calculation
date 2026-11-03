@@ -465,7 +465,7 @@ function renderEmployees() {
           el(
             'td',
             { class: 'actions' },
-            el('button', { class: 'ghost', type: 'button', onclick: () => resetPassword(e) }, 'Đặt lại mật khẩu'),
+            el('button', { class: 'ghost', type: 'button', onclick: () => resetPassword(e) }, 'Đổi mật khẩu'),
             el('button', { class: 'danger', type: 'button', onclick: () => deleteEmployee(e) }, 'Xoá'),
           ),
         ),
@@ -475,7 +475,7 @@ function renderEmployees() {
   asCards(table);
 }
 
-// Khung đặt lại mật khẩu: về 6 số cuối CCCD, hoặc mật khẩu do admin tự đặt
+// Khung đổi mật khẩu nhân viên: admin tự đặt (chọn sẵn), hoặc đưa về 6 số cuối CCCD
 function resetPassword(employee) {
   const who = employee.name || employee.login_id;
   const card = $('code-card');
@@ -483,7 +483,7 @@ function resetPassword(employee) {
   const mustChange = el('input', { type: 'checkbox', checked: true });
   const customWrap = el(
     'div',
-    { hidden: true },
+    {},
     el('div', { class: 'password' }, input, el('button', { type: 'button', 'aria-label': 'Hiện mật khẩu', 'aria-pressed': 'false' }, 'Hiện')),
     el('label', { class: 'choice' }, mustChange, 'Bắt nhân viên đặt mật khẩu riêng khi đăng nhập'),
   );
@@ -518,11 +518,11 @@ function resetPassword(employee) {
     el(
       'form',
       { onsubmit: save, novalidate: true },
-      el('h2', {}, `Đặt lại mật khẩu: ${who}`),
+      el('h2', {}, `Đổi mật khẩu: ${who}`),
       el('p', { class: 'muted' }, `Số CCCD ${employee.login_id}. Mật khẩu cũ sẽ không dùng được nữa.`),
-      modeRadio('cccd', '6 số cuối số CCCD (nhân viên phải đổi khi đăng nhập)', true),
-      modeRadio('custom', 'Mật khẩu do admin đặt', false),
+      modeRadio('custom', 'Mật khẩu do admin đặt', true),
       customWrap,
+      modeRadio('cccd', 'Đưa về 6 số cuối số CCCD (nhân viên phải đổi khi đăng nhập)', false),
       el(
         'div',
         { class: 'row-actions' },
@@ -535,6 +535,7 @@ function resetPassword(employee) {
   initPasswordToggles(card);
   card.hidden = false;
   card.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  input.focus({ preventScroll: true });
 }
 
 async function deleteEmployee(employee) {
