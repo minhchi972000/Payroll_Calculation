@@ -165,12 +165,7 @@ async function payslip(request, env, url) {
 
 // ---------- Admin ----------
 
-async function adminLogin(request, env) {
-  const body = await readJson(request);
-  return adminSignIn(request, env, body.username, body.password);
-}
-
-// Dùng cho cả trang /admin và trang đăng nhập chung
+// Admin đăng nhập ở trang chung với nhân viên, gõ tài khoản admin vào ô Số CCCD
 async function adminSignIn(request, env, username, password) {
   if (!env.ADMIN_USERNAME || !env.ADMIN_PASSWORD) {
     throw new HttpError(503, 'Chưa cấu hình tài khoản admin (ADMIN_USERNAME và ADMIN_PASSWORD).');
@@ -395,7 +390,6 @@ async function route(request, env, url) {
   if (pathname === '/api/me' && method === 'GET') return me(request, env);
   if (pathname === '/api/payslip' && method === 'GET') return payslip(request, env, url);
 
-  if (pathname === '/api/admin/login' && method === 'POST') return adminLogin(request, env);
   if (pathname === '/api/admin/logout' && method === 'POST') return adminLogout(request, env);
   if (pathname === '/api/admin/me' && method === 'GET') return adminMe(request, env);
   if (pathname === '/api/admin/import' && method === 'POST') return adminImport(request, env);

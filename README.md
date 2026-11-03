@@ -31,14 +31,14 @@ npx wrangler secret put ADMIN_USERNAME
 npx wrangler secret put ADMIN_PASSWORD
 ```
 
-Xong. Link gửi cho nhân viên là địa chỉ gốc. Admin đăng nhập ngay ở trang đó bằng tài khoản admin (gõ vào ô Số CCCD)
-và được chuyển sang trang quản lý; hoặc vào thẳng `https://bang-luong.<ten-ban>.workers.dev/admin`.
-Để gõ được ở ô Số CCCD, `ADMIN_USERNAME` nên là 12 chữ số và không trùng CCCD của ai (ví dụ bắt đầu bằng 9).
+Xong. Nhân viên và admin **đăng nhập chung một trang** (địa chỉ gốc). Admin gõ tài khoản admin vào ô Số CCCD
+và được chuyển sang trang quản lý; trang `/admin` khi chưa đăng nhập cũng tự chuyển về trang chung này.
+Để gõ được ở ô Số CCCD, `ADMIN_USERNAME` phải là 12 chữ số và không trùng CCCD của ai (ví dụ bắt đầu bằng 9).
 Muốn dùng tên miền riêng (ví dụ `luong.congty.vn`): Cloudflare dashboard → Workers → bang-luong → Settings → Domains & Routes.
 
 ## Quy trình hằng tháng
 
-1. Vào `/admin` → **Nhập bảng lương** → chọn tháng → chọn file Excel (hoặc dán link Google Sheet).
+1. Đăng nhập bằng tài khoản admin → **Nhập bảng lương** → chọn tháng → chọn file Excel (hoặc dán link Google Sheet).
 2. Bấm **Nhập bảng lương**. File hợp lệ thì nhập luôn, nhân viên xem được ngay.
    File có lỗi (CCCD sai, trùng…) thì không nhập gì, web hiện danh sách lỗi để sửa.
    Tháng đã có bảng lương thì web hỏi lại trước khi thay thế.
@@ -129,7 +129,7 @@ Không muốn cấu hình? Trong Google Sheet chọn **Tệp → Tải xuống �
 ```bash
 cp .dev.vars.example .dev.vars      # sửa ADMIN_USERNAME, ADMIN_PASSWORD nếu muốn
 npm run db:migrate:local
-npm run dev                         # mở http://localhost:8787 và http://localhost:8787/admin
+npm run dev                         # mở http://localhost:8787, đăng nhập bằng ADMIN_USERNAME trong .dev.vars
 npm test
 ```
 

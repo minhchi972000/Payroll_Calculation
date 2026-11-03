@@ -1,4 +1,4 @@
-import { api, el, formatDateTime, formatPeriod, formatValue, hidePasswords, initPasswordToggles, netPayIndex, showError } from '../common.js';
+import { api, el, formatDateTime, formatPeriod, formatValue, initPasswordToggles, netPayIndex, showError } from '../common.js';
 
 const $ = (id) => document.getElementById(id);
 
@@ -6,46 +6,30 @@ let config = { googleServiceAccount: null };
 let workbook = null;
 let employees = [];
 
-function show(view) {
-  for (const id of ['loading', 'login-view', 'app-view']) $(id).hidden = id !== view;
-  hidePasswords();
+// Admin đăng nhập chung trang với nhân viên (trang chính, gõ tài khoản admin vào ô Số CCCD).
+// Chưa đăng nhập hoặc hết phiên thì quay về trang đó.
+function goToLogin() {
+  location.replace('/');
 }
-
-initPasswordToggles();
 
 async function boot() {
   try {
     config = await api('/api/admin/me');
   } catch (err) {
-    show('login-view');
-    if (err.status !== 401) showError($('login-error'), err);
+    if (err.status === 401) return goToLogin();
+    $('loading').textContent = `Không tải được trang: ${err.message}`;
     return;
   }
   $('gsheet-missing').hidden = Boolean(config.googleServiceAccount);
   $('gsheet-ready').hidden = !config.googleServiceAccount;
   $('gsheet-email').textContent = config.googleServiceAccount || '';
-  show('app-view');
+  $('loading').hidden = true;
+  $('app-view').hidden = false;
 }
-
-$('login-form').addEventListener('submit', async (event) => {
-  event.preventDefault();
-  const button = event.submitter;
-  button.disabled = true;
-  showError($('login-error'), null);
-  try {
-    await api('/api/admin/login', { method: 'POST', body: { username: $('admin-username').value, password: $('admin-password').value } });
-    $('admin-password').value = '';
-    await boot();
-  } catch (err) {
-    showError($('login-error'), err);
-  } finally {
-    button.disabled = false;
-  }
-});
 
 $('logout').addEventListener('click', async () => {
   await api('/api/admin/logout', { method: 'POST' }).catch(() => {});
-  show('login-view');
+  goToLogin();
 });
 
 // Ghi tên cột vào từng ô để trên điện thoại bảng hiện thành thẻ (CSS table.cards)
@@ -61,10 +45,7 @@ function asCards(table) {
 }
 
 function handleAuthError(err, errorBox) {
-  if (err.status === 401) {
-    show('login-view');
-    return;
-  }
+  if (err.status === 401) return goToLogin();
   showError(errorBox, err);
 }
 
@@ -518,7 +499,7 @@ async function showPayslipDetail(employee) {
   try {
     ({ payslips } = await api(`/api/admin/employees/${employee.login_id}/payslips`));
   } catch (err) {
-    if (err.status === 401) return show('login-view');
+    if (err.status === 401) return goToLogin();
     card.replaceChildren(head, el('p', { class: 'error' }, err.message), closeButton);
     return;
   }
@@ -586,7 +567,7 @@ function resetPassword(employee) {
       loadEmployees();
     } catch (err) {
       button.disabled = false;
-      if (err.status === 401) return show('login-view');
+      if (err.status === 401) return goToLogin();
       showError(error, err);
     }
   }

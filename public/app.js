@@ -28,9 +28,11 @@ async function boot() {
   try {
     profile = await api('/api/me');
   } catch (err) {
-    if (err.status === 401) return show('login-view');
     show('login-view');
-    return showError($('login-error'), err);
+    if (err.status !== 401) return showError($('login-error'), err);
+    // Admin đã đăng nhập thì vào thẳng trang quản lý
+    if (await api('/api/admin/me').then(() => true, () => false)) location.replace('/admin');
+    return;
   }
   showPayslips();
 }
