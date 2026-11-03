@@ -1,16 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { isValidPeriod, normalizeCccd, normalizeLoginId, normalizePhone, parsePayrollTable } from '../src/parse.js';
-
-test('chuẩn hoá SĐT', () => {
-  assert.equal(normalizePhone('0901 234 567'), '0901234567');
-  assert.equal(normalizePhone('+84 901.234.567'), '0901234567');
-  assert.equal(normalizePhone(901234567), '0901234567'); // Excel làm mất số 0
-  assert.equal(normalizePhone('84901234567'), '0901234567');
-  assert.equal(normalizePhone('12345'), null);
-  assert.equal(normalizePhone(''), null);
-  assert.equal(normalizePhone(null), null);
-});
+import { isValidPeriod, normalizeCccd, normalizeLoginId, parsePayrollTable } from '../src/parse.js';
 
 test('chuẩn hoá CCCD', () => {
   assert.equal(normalizeCccd('079300001234'), '079300001234');
@@ -23,11 +13,12 @@ test('chuẩn hoá CCCD', () => {
   assert.equal(normalizeCccd(''), null);
 });
 
-test('tên đăng nhập: 12 số là CCCD, còn lại là SĐT', () => {
+test('đăng nhập chỉ bằng CCCD đủ 12 số', () => {
   assert.equal(normalizeLoginId(' 079300001234 '), '079300001234');
-  assert.equal(normalizeLoginId('0901 234 567'), '0901234567');
-  assert.equal(normalizeLoginId('+84 901 234 567'), '0901234567');
-  assert.equal(normalizeLoginId('79300001234'), null);
+  assert.equal(normalizeLoginId('079 300 001 234'), '079300001234');
+  assert.equal(normalizeLoginId('79300001234'), null); // thiếu số, không tự thêm 0 khi đăng nhập
+  assert.equal(normalizeLoginId('0901234567'), null); // SĐT không dùng được
+  assert.equal(normalizeLoginId('999999999999'), null); // không phải CCCD (mã tỉnh 999)
   assert.equal(normalizeLoginId(undefined), null);
 });
 
@@ -42,27 +33,27 @@ test('bảng đơn giản có dòng tiêu đề trang, STT, cột ẩn, dòng t�
   const rows = [
     ['BẢNG LƯƠNG THÁNG 10/2026', '', '', '', '', ''],
     [],
-    ['STT', 'Họ và tên', 'SĐT', 'Lương cơ bản', '#Ghi chú nội bộ', 'Thực lĩnh'],
-    [1, 'Nguyễn Văn A', 901234567, 10000000, 'tăng lương T11', 9500000],
-    [2, 'Trần Thị B', '0912 345 678', 12000000, '', 11300000],
+    ['STT', 'Họ và tên', 'Số CCCD', 'Lương cơ bản', '#Ghi chú nội bộ', 'Thực lĩnh'],
+    [1, 'Nguyễn Văn A', 79300001234, 10000000, 'tăng lương T11', 9500000],
+    [2, 'Trần Thị B', '036 095 004 567', 12000000, '', 11300000],
     ['', 'Tổng cộng', '', 22000000, '', 20800000],
   ];
   const out = parsePayrollTable(rows);
   assert.deepEqual(out.errors, []);
-  assert.equal(out.idLabel, 'SĐT');
+  assert.equal(out.idLabel, 'Số CCCD');
   assert.deepEqual(out.columns, ['Lương cơ bản', 'Thực lĩnh']);
   assert.equal(out.records.length, 2);
-  assert.deepEqual(out.records[0], { loginId: '0901234567', name: 'Nguyễn Văn A', values: [10000000, 9500000] });
-  assert.equal(out.records[1].loginId, '0912345678');
+  assert.deepEqual(out.records[0], { loginId: '079300001234', name: 'Nguyễn Văn A', values: [10000000, 9500000] });
+  assert.equal(out.records[1].loginId, '036095004567');
   assert.equal(out.warnings.length, 1);
   assert.match(out.warnings[0], /Dòng 6/);
 });
 
 test('tiêu đề 2 tầng (ô gộp đã được điền)', () => {
   const rows = [
-    ['Họ tên', 'Số điện thoại', 'Lương', 'Khấu trừ', 'Khấu trừ', 'Thực nhận'],
-    ['Họ tên', 'Số điện thoại', 'Lương', 'BHXH', 'Thuế TNCN', 'Thực nhận'],
-    ['Lê C', '0987654321', 15000000, 1200000, 300000, 13500000],
+    ['Họ tên', 'CCCD', 'Lương', 'Khấu trừ', 'Khấu trừ', 'Thực nhận'],
+    ['Họ tên', 'CCCD', 'Lương', 'BHXH', 'Thuế TNCN', 'Thực nhận'],
+    ['Lê C', '001301007890', 15000000, 1200000, 300000, 13500000],
   ];
   const out = parsePayrollTable(rows);
   assert.deepEqual(out.errors, []);
@@ -72,23 +63,23 @@ test('tiêu đề 2 tầng (ô gộp đã được điền)', () => {
 
 test('dòng tên phòng ban gộp ô không bị nhầm là tiêu đề phụ', () => {
   const rows = [
-    ['Họ tên', 'SĐT', 'Lương'],
+    ['Họ tên', 'Số CCCD', 'Lương'],
     ['Phòng Kinh doanh', 'Phòng Kinh doanh', 'Phòng Kinh doanh'],
-    ['Lê C', '0987654321', 15000000],
+    ['Lê C', '001301007890', 15000000],
   ];
   const out = parsePayrollTable(rows);
   assert.deepEqual(out.columns, ['Lương']);
   assert.equal(out.records.length, 1);
   assert.deepEqual(out.errors, []);
-  assert.match(out.warnings[0], /Dòng 2: không có SĐT/);
+  assert.match(out.warnings[0], /Dòng 2: không có Số CCCD/);
 });
 
-test('báo lỗi SĐT sai và trùng', () => {
+test('báo lỗi CCCD sai và trùng', () => {
   const rows = [
-    ['Họ tên', 'SĐT', 'Lương'],
-    ['A', '0901234567', 1],
-    ['B', '090123', 2],
-    ['C', '0901 234 567', 3],
+    ['Họ tên', 'Số CCCD', 'Lương'],
+    ['A', '079300001234', 1],
+    ['B', '07930', 2],
+    ['C', '079 300 001 234', 3],
   ];
   const out = parsePayrollTable(rows);
   assert.equal(out.records.length, 1);
@@ -97,10 +88,16 @@ test('báo lỗi SĐT sai và trùng', () => {
   assert.match(out.errors[1], /Dòng 4.*trùng với dòng 2/);
 });
 
-test('không có cột CCCD hay SĐT', () => {
+test('không có cột CCCD', () => {
   const out = parsePayrollTable([['Họ tên', 'Lương'], ['A', 1]]);
   assert.equal(out.records.length, 0);
-  assert.match(out.errors[0], /Không tìm thấy cột số CCCD hoặc số điện thoại/);
+  assert.match(out.errors[0], /Không tìm thấy cột số CCCD/);
+});
+
+test('file chỉ có cột SĐT bị từ chối (đăng nhập chỉ bằng CCCD)', () => {
+  const out = parsePayrollTable([['Họ tên', 'SĐT', 'Lương'], ['A', '0901234567', 1]]);
+  assert.equal(out.records.length, 0);
+  assert.match(out.errors[0], /Không tìm thấy cột số CCCD/);
 });
 
 // Giống bảng lương thật của công ty: đăng nhập bằng CCCD, tiêu đề 2 tầng có chữ Trung,
@@ -137,7 +134,7 @@ test('mẫu bảng lương có cột Số CCCD', () => {
   assert.match(out.warnings[0], /Dòng 7: không có Số CCCD/);
 });
 
-test('có cả cột CCCD và SĐT thì đăng nhập bằng CCCD', () => {
+test('cột SĐT nằm cạnh cột CCCD hiện như cột bình thường', () => {
   const rows = [
     ['Họ tên', 'SĐT', 'Số CCCD', 'Lương'],
     ['A', '0901234567', '079300001234', 1],

@@ -1,6 +1,5 @@
 // Đọc bảng lương dạng mảng 2 chiều (từ Excel hoặc Google Sheet) thành dữ liệu từng người.
 
-const PHONE_HEADERS = ['sdt', 'so dt', 'so dien thoai', 'dien thoai', 'dien thoai di dong', 'phone', 'mobile', 'so dien thoai lien he'];
 const CCCD_HEADERS = [
   'so cccd', 'cccd', 'so can cuoc', 'can cuoc', 'so can cuoc cong dan', 'can cuoc cong dan',
   'so cccd cmnd', 'cccd cmnd', 'so cmnd cccd', 'cmnd cccd', 'so cmnd', 'cmnd',
@@ -21,16 +20,6 @@ export function normalizeText(value) {
     .trim();
 }
 
-// Trả về SĐT dạng 0xxxxxxxxx, hoặc null nếu không hợp lệ.
-// Excel hay làm mất số 0 đầu (ô kiểu số), nên 912345678 vẫn được chấp nhận.
-export function normalizePhone(value) {
-  if (value === null || value === undefined) return null;
-  let digits = String(value).replace(/\D/g, '');
-  if (digits.startsWith('84') && digits.length === 11) digits = '0' + digits.slice(2);
-  if (digits.length === 9 && !digits.startsWith('0')) digits = '0' + digits;
-  return /^0\d{9}$/.test(digits) ? digits : null;
-}
-
 // Trả về số CCCD 12 chữ số, hoặc null nếu không hợp lệ.
 // CCCD mở đầu bằng mã tỉnh 001–096. Ô kiểu số trong Excel làm mất các số 0 đầu
 // (mất 2 số với mã 001–009), nên 10–11 chữ số vẫn được chấp nhận và thêm lại số 0.
@@ -41,17 +30,14 @@ export function normalizeCccd(value) {
   return /^0(?!00)\d{11}$/.test(digits) ? digits : null;
 }
 
-// Tên đăng nhập nhân viên gõ vào: 12 chữ số là CCCD, còn lại coi là SĐT.
+// Số CCCD nhân viên gõ khi đăng nhập: phải đủ 12 chữ số (không tự thêm số 0 như khi đọc Excel).
 export function normalizeLoginId(value) {
   const digits = String(value ?? '').replace(/\D/g, '');
-  return digits.length === 12 ? normalizeCccd(digits) : normalizePhone(value);
+  return digits.length === 12 ? normalizeCccd(digits) : null;
 }
 
-// Cột dùng làm tên đăng nhập. File có cả hai cột thì dùng CCCD.
-const ID_COLUMNS = [
-  { headers: CCCD_HEADERS, label: 'Số CCCD', hint: 'cần đủ 12 chữ số', normalize: normalizeCccd },
-  { headers: PHONE_HEADERS, label: 'SĐT', hint: 'cần đủ 10 chữ số', normalize: normalizePhone },
-];
+// Cột dùng làm tên đăng nhập: chỉ số CCCD. Cột SĐT (nếu có) hiện như cột bình thường.
+const ID_COLUMNS = [{ headers: CCCD_HEADERS, label: 'Số CCCD', hint: 'cần đủ 12 chữ số', normalize: normalizeCccd }];
 
 export function isValidPeriod(period) {
   return typeof period === 'string' && /^\d{4}-(0[1-9]|1[0-2])$/.test(period);
@@ -80,7 +66,7 @@ function findHeaderRow(rows) {
   return null;
 }
 
-// Dòng ngay dưới tiêu đề là tiêu đề phụ nếu: không có số, không có CCCD/SĐT hợp lệ, và có ít nhất
+// Dòng ngay dưới tiêu đề là tiêu đề phụ nếu: không có số, không có CCCD hợp lệ, và có ít nhất
 // 2 chữ khác nhau không trùng với ô phía trên (dòng tên phòng ban gộp ô chỉ có 1 giá trị).
 function hasSubHeader(rows, header) {
   const next = rows[header.index + 1];
@@ -114,7 +100,7 @@ export function parsePayrollTable(rows) {
       idLabel: '',
       columns: [],
       records: [],
-      errors: [`Không tìm thấy cột số CCCD hoặc số điện thoại trong ${HEADER_SCAN_ROWS} dòng đầu. Hãy đặt tiêu đề cột là "Số CCCD" (hoặc "SĐT").`],
+      errors: [`Không tìm thấy cột số CCCD trong ${HEADER_SCAN_ROWS} dòng đầu. Hãy đặt tiêu đề cột là "Số CCCD".`],
       warnings,
     };
   }

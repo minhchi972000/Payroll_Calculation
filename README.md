@@ -1,7 +1,7 @@
 # Bảng lương: mỗi người chỉ xem lương của mình
 
 Admin nhập một bảng lương chung (Excel hoặc Google Sheet). Mọi nhân viên dùng chung một link,
-đăng nhập bằng số CCCD (hoặc số điện thoại, nếu bảng lương dùng cột SĐT) và chỉ thấy phiếu lương của chính mình.
+đăng nhập bằng số CCCD (đủ 12 số) và chỉ thấy phiếu lương của chính mình.
 
 - Chạy trên **Cloudflare Workers + D1**, gói miễn phí (cho phép dùng cho công ty).
 - Server chỉ trả về dòng lương của người đang đăng nhập. Trình duyệt không bao giờ nhận được dữ liệu của người khác.
@@ -31,7 +31,9 @@ npx wrangler secret put ADMIN_USERNAME
 npx wrangler secret put ADMIN_PASSWORD
 ```
 
-Xong. Trang admin ở `https://bang-luong.<ten-ban>.workers.dev/admin`, link gửi cho nhân viên là địa chỉ gốc.
+Xong. Link gửi cho nhân viên là địa chỉ gốc. Admin đăng nhập ngay ở trang đó bằng tài khoản admin (gõ vào ô Số CCCD)
+và được chuyển sang trang quản lý; hoặc vào thẳng `https://bang-luong.<ten-ban>.workers.dev/admin`.
+Để gõ được ở ô Số CCCD, `ADMIN_USERNAME` nên là 12 chữ số và không trùng CCCD của ai (ví dụ bắt đầu bằng 9).
 Muốn dùng tên miền riêng (ví dụ `luong.congty.vn`): Cloudflare dashboard → Workers → bang-luong → Settings → Domains & Routes.
 
 ## Quy trình hằng tháng
@@ -59,16 +61,13 @@ Ví dụ đã điền sẵn 3 người (dữ liệu giả, để chạy thử): 
 - Cần một dòng tiêu đề có cột **Số CCCD** (hoặc "CCCD", "Số căn cước", "Số CMND") và **Họ tên** (hoặc "Họ & tên", "Họ và tên").
   Nhân viên đăng nhập bằng số trong cột này.
   Dòng tiêu đề không cần nằm ở dòng 1, phía trên có thể có tên công ty, tiêu đề bảng.
-- Không có cột CCCD thì dùng cột **SĐT** (hoặc "Số điện thoại"). File có cả hai cột thì đăng nhập bằng CCCD,
-  cột SĐT hiện như một cột bình thường. Nên giữ một loại cột đăng nhập cố định qua các tháng,
-  vì đổi loại cột thì hệ thống coi là tài khoản mới.
+- Cột CCCD là bắt buộc. Cột SĐT (nếu có) chỉ hiện như một cột bình thường, không dùng để đăng nhập.
 - **Mọi cột còn lại sẽ hiện cho nhân viên**, đúng thứ tự trong file.
 - Cột bị ẩn: "STT" (kể cả khi bị xuống dòng thành "ST T"), và cột có tiêu đề bắt đầu bằng **#** (ví dụ `#Ghi chú nội bộ`).
 - Tiêu đề 2 tầng gộp ô (ví dụ "Khấu trừ" nằm trên "BHXH", "Thuế TNCN") sẽ hiện thành "Khấu trừ - BHXH".
-- Dòng không có CCCD/SĐT (dòng tổng cộng, tên phòng ban, chữ ký) được bỏ qua.
+- Dòng không có CCCD (dòng tổng cộng, tên phòng ban, chữ ký) được bỏ qua.
 - CCCD phải đủ 12 số. Ô kiểu số trong Excel làm mất số 0 đầu (ví dụ `79300001234`, hay `1301007890` với mã tỉnh 001)
   vẫn đọc đúng. CMND cũ 9 số không được chấp nhận.
-- SĐT có thể ghi `0901234567`, `0901 234 567`, `+84901234567`. Ô kiểu số bị mất số 0 đầu vẫn đọc đúng.
 - Cột có chữ "Thực lĩnh" / "Thực nhận" / "Thực lãnh" được làm nổi bật ở đầu phiếu lương.
 
 ## Bản prod và bản demo
@@ -131,7 +130,7 @@ npm test
 
 ## Bảo mật
 
-- Phiếu lương luôn được lọc theo tài khoản (CCCD/SĐT) trong phiên đăng nhập ở server, không theo tham số từ trình duyệt.
+- Phiếu lương luôn được lọc theo số CCCD trong phiên đăng nhập ở server, không theo tham số từ trình duyệt.
 - Mật khẩu nhân viên được băm (PBKDF2). Phiên đăng nhập là cookie HttpOnly, chỉ lưu bản băm trong database.
 - Sai 5 lần với cùng một tài khoản thì khoá 15 phút. Admin bấm "Cấp mã mới" sẽ mở khoá ngay.
 - Đổi mật khẩu hoặc cấp mã mới sẽ đăng xuất người đó khỏi mọi thiết bị khác.

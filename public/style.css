@@ -41,7 +41,7 @@ a { color: var(--primary); font-weight: 600; }
   letter-spacing: 0.02em;
 }
 
-.wrap { max-width: 480px; margin: 0 auto; padding: 24px 16px 48px; }
+.wrap { max-width: 1080px; margin: 0 auto; padding: 24px 16px 48px; }
 .wrap.wide { max-width: 960px; }
 
 header.top {
@@ -73,6 +73,10 @@ input[type="text"], input[type="tel"], input[type="password"], input[type="month
   color: var(--text);
 }
 input:focus, select:focus { outline: 2px solid var(--primary); outline-offset: 1px; border-color: transparent; }
+
+/* Bộ đếm số CCCD dưới ô đăng nhập */
+.field-hint { margin: 4px 0 0; font-size: 13px; color: var(--muted); text-align: right; }
+.field-hint.ok { color: var(--primary); font-weight: 600; }
 
 /* Ô mật khẩu có nút Hiện / Ẩn */
 .password { position: relative; }
@@ -114,9 +118,10 @@ button.link:hover, .password button:hover { text-decoration: underline; }
 .payslip-head .name { font-size: 18px; font-weight: 700; }
 .net {
   background: var(--primary-soft);
-  border-radius: 10px;
-  padding: 14px 16px;
-  margin: 0 0 4px;
+  border: 1px solid #c4e3d9;
+  border-radius: var(--radius);
+  padding: 16px 20px;
+  margin: 0 0 16px;
 }
 .net .label { font-size: 13px; color: var(--primary); font-weight: 600; text-transform: uppercase; letter-spacing: 0.02em; }
 .net .value { font-size: 28px; font-weight: 700; color: var(--primary); font-variant-numeric: tabular-nums; }
@@ -137,7 +142,13 @@ dl.items .row.negative dd { color: var(--danger); }
 
 #payslip-card.loading { opacity: 0.5; transition: opacity 0.15s; }
 
+/* Điện thoại, máy tính bảng dọc: một cột, không rộng quá 560px cho dễ đọc */
+#payslip-view > header.top,
+#payslip-view > p,
+.payslip-layout { max-width: 560px; margin-left: auto; margin-right: auto; }
+
 .group { margin-top: 16px; }
+.group:first-child { margin-top: 0; }
 .group h3 {
   margin: 0;
   padding-bottom: 6px;
@@ -171,6 +182,25 @@ dl.tiles dt { font-size: 12px; line-height: 1.3; color: var(--muted); }
 
 button.link.more { display: block; margin: 14px auto 0; padding: 8px; }
 
+/* Laptop: 2 cột, cột trái đứng yên khi cuộn, danh sách tiền chia 2 cột đọc từ trên xuống */
+@media (min-width: 900px) {
+  .wrap { padding-top: 32px; }
+  #payslip-view > header.top,
+  #payslip-view > p,
+  .payslip-layout { max-width: none; }
+  .payslip-layout { display: grid; grid-template-columns: 340px minmax(0, 1fr); gap: 20px; align-items: start; }
+  .payslip-side { position: sticky; top: 16px; }
+  body:has(.demo-banner) .payslip-side { top: 48px; }
+  .payslip-side .card { margin-bottom: 16px; }
+  .net .value { font-size: 32px; }
+  #payslip-card { padding: 24px 28px; }
+  dl.tiles { grid-template-columns: repeat(auto-fill, minmax(112px, 1fr)); }
+  .group { margin-top: 24px; }
+  .group:first-child { margin-top: 0; }
+  .group dl.items { columns: 2; column-gap: 40px; }
+  .group dl.items .row { break-inside: avoid; }
+}
+
 /* Admin */
 .tabs { display: flex; gap: 8px; margin-bottom: 16px; flex-wrap: wrap; }
 .tabs button { background: #fff; border-color: var(--line); color: var(--text); }
@@ -189,6 +219,22 @@ td code, .code { font: 600 15px ui-monospace, SFMono-Regular, Menlo, monospace; 
 
 .tag { display: inline-block; font-size: 12px; padding: 2px 8px; border-radius: 999px; background: var(--line); color: var(--muted); }
 .tag.ok { background: var(--primary-soft); color: var(--primary); }
+
+/* Admin trên điện thoại: mỗi dòng bảng thành một thẻ, ô nào cũng kèm tên cột (data-label) */
+@media (max-width: 640px) {
+  .tabs { flex-wrap: nowrap; }
+  .tabs button { flex: 1; padding: 10px 6px; font-size: 14px; }
+  .source-switch { flex-wrap: wrap; }
+  table.cards thead { display: none; }
+  table.cards, table.cards tbody, table.cards tr { display: block; width: 100%; }
+  table.cards tr { border: 1px solid var(--line); border-radius: 10px; padding: 2px 12px; margin-bottom: 10px; }
+  table.cards td { display: flex; justify-content: space-between; align-items: center; gap: 12px; padding: 9px 0; text-align: right; }
+  table.cards td:last-child { border-bottom: 0; }
+  table.cards td::before { content: attr(data-label); color: var(--muted); font-weight: 600; text-align: left; }
+  table.cards td:not([data-label])::before, table.cards td[data-label=""]::before { display: none; }
+  table.cards td.actions { justify-content: flex-end; flex-wrap: wrap; gap: 8px; }
+  table.cards td.actions button { margin-left: 0; }
+}
 
 ul.messages { margin: 8px 0 0; padding-left: 20px; font-size: 14px; }
 .row-actions { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 12px; }

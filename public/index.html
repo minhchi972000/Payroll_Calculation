@@ -13,12 +13,14 @@
   <main class="wrap">
     <p id="loading" class="muted">Đang tải…</p>
 
-    <section id="login-view" class="card" hidden>
+    <section id="login-view" class="card narrow" hidden>
       <h2>Xem bảng lương</h2>
-      <p class="muted">Đăng nhập bằng số CCCD (12 số trên thẻ căn cước) của bạn. Lần đầu tiên, dùng mã 8 số admin đã gửi.</p>
+      <p class="muted">Đăng nhập bằng số CCCD (đủ 12 số trên thẻ căn cước) của bạn. Lần đầu tiên, dùng mã 8 số admin đã gửi.</p>
       <form id="login-form" novalidate>
-        <label for="login-id">Số CCCD hoặc số điện thoại</label>
-        <input id="login-id" type="text" inputmode="numeric" autocomplete="username" placeholder="0xx xxx xxx xxx" required>
+        <label for="login-id">Số CCCD</label>
+        <input id="login-id" type="text" inputmode="numeric" pattern="[0-9]{12}" autocomplete="username"
+          placeholder="12 chữ số" aria-describedby="login-id-count" required>
+        <p id="login-id-count" class="field-hint">0/12 số</p>
         <label for="login-password">Mật khẩu hoặc mã đăng nhập</label>
         <div class="password">
           <input id="login-password" type="password" autocomplete="current-password" required>
@@ -30,7 +32,7 @@
       <p class="muted">Quên mật khẩu? Liên hệ admin để được cấp mã mới.</p>
     </section>
 
-    <section id="change-view" class="card" hidden>
+    <section id="change-view" class="card narrow" hidden>
       <h2 id="change-title">Đặt mật khẩu mới</h2>
       <p id="change-intro" class="muted">Đây là lần đầu bạn đăng nhập. Hãy đặt mật khẩu riêng để dùng cho các lần sau.</p>
       <form id="change-form" novalidate>
@@ -64,29 +66,34 @@
         <button id="logout" class="ghost" type="button">Đăng xuất</button>
       </header>
 
-      <div class="card">
-        <div class="payslip-head">
-          <div>
-            <div id="emp-name" class="name"></div>
-            <div id="emp-id" class="muted"></div>
-            <div id="emp-info" class="muted"></div>
+      <!-- Điện thoại: một cột. Laptop: cột trái (thông tin, thực lãnh) đứng yên, cột phải là chi tiết -->
+      <div class="payslip-layout">
+        <aside class="payslip-side">
+          <div class="card">
+            <div class="payslip-head">
+              <div>
+                <div id="emp-name" class="name"></div>
+                <div id="emp-id" class="muted"></div>
+                <div id="emp-info" class="muted"></div>
+              </div>
+            </div>
+            <div id="period-wrap">
+              <label for="period">Kỳ lương</label>
+              <select id="period"></select>
+            </div>
+            <p id="no-payslip" class="notice" hidden>Chưa có bảng lương nào cho bạn.</p>
           </div>
-        </div>
-        <div id="period-wrap">
-          <label for="period">Kỳ lương</label>
-          <select id="period"></select>
-        </div>
-        <p id="no-payslip" class="notice" hidden>Chưa có bảng lương nào cho bạn.</p>
-      </div>
+          <div id="net" class="net" hidden>
+            <div id="net-label" class="label"></div>
+            <div id="net-value" class="value"></div>
+          </div>
+        </aside>
 
-      <div id="payslip-card" class="card" hidden>
-        <div id="net" class="net" hidden>
-          <div id="net-label" class="label"></div>
-          <div id="net-value" class="value"></div>
+        <div id="payslip-card" class="card" hidden>
+          <div id="groups"></div>
+          <button id="toggle-zero" class="link more" type="button" hidden></button>
+          <p id="payslip-error" class="error" hidden></p>
         </div>
-        <div id="groups"></div>
-        <button id="toggle-zero" class="link more" type="button" hidden></button>
-        <p id="payslip-error" class="error" hidden></p>
       </div>
 
       <p><button id="open-change" class="link" type="button">Đổi mật khẩu</button></p>

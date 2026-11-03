@@ -1,4 +1,4 @@
-import { api, el, formatDateTime, formatPeriod, formatValue, hidePasswords, initPasswordToggles, loginIdLabel, showError } from '../common.js';
+import { api, el, formatDateTime, formatPeriod, formatValue, hidePasswords, initPasswordToggles, showError } from '../common.js';
 
 const $ = (id) => document.getElementById(id);
 
@@ -48,6 +48,18 @@ $('logout').addEventListener('click', async () => {
   await api('/api/admin/logout', { method: 'POST' }).catch(() => {});
   show('login-view');
 });
+
+// Ghi tên cột vào từng ô để trên điện thoại bảng hiện thành thẻ (CSS table.cards)
+function asCards(table) {
+  const heads = [...table.querySelectorAll('thead th')].map((th) => th.textContent);
+  table.classList.add('cards');
+  table.querySelectorAll('tbody tr').forEach((tr) => {
+    [...tr.children].forEach((td, i) => {
+      if (heads.length) td.dataset.label = heads[i] ?? '';
+    });
+  });
+  return table;
+}
 
 function handleAuthError(err, errorBox) {
   if (err.status === 401) {
@@ -263,7 +275,7 @@ $('confirm-btn').addEventListener('click', async (event) => {
 function loginMessage({ name, loginId, code }) {
   return [
     `Chào ${name || 'bạn'}, bảng lương của bạn xem tại: ${location.origin}`,
-    `Đăng nhập bằng ${loginIdLabel(loginId)}: ${loginId}`,
+    `Đăng nhập bằng số CCCD: ${loginId}`,
     `Mã đăng nhập: ${code}`,
     'Lần đầu đăng nhập bạn sẽ đặt mật khẩu mới. Không chia sẻ mã này cho người khác.',
   ].join('\n');
@@ -284,10 +296,10 @@ function accountsTable(accounts) {
   return el(
     'div',
     { class: 'table-scroll' },
-    el(
+    asCards(el(
       'table',
       {},
-      el('thead', {}, el('tr', {}, el('th', {}, 'Họ tên'), el('th', {}, 'Số CCCD / SĐT'), el('th', {}, 'Mã đăng nhập'), el('th', {}, ''))),
+      el('thead', {}, el('tr', {}, el('th', {}, 'Họ tên'), el('th', {}, 'Số CCCD'), el('th', {}, 'Mã đăng nhập'), el('th', {}, ''))),
       el(
         'tbody',
         {},
@@ -302,13 +314,13 @@ function accountsTable(accounts) {
           ),
         ),
       ),
-    ),
+    )),
   );
 }
 
 function downloadCsv(accounts, period) {
   const quote = (v) => `"${String(v).replace(/"/g, '""')}"`;
-  const lines = [['Họ tên', 'Số CCCD / SĐT', 'Mã đăng nhập', 'Tin nhắn'].map(quote).join(',')];
+  const lines = [['Họ tên', 'Số CCCD', 'Mã đăng nhập', 'Tin nhắn'].map(quote).join(',')];
   // ="0793..." để Excel giữ số 0 đầu
   for (const a of accounts) lines.push([quote(a.name), `="${a.loginId}"`, `="${a.code}"`, quote(loginMessage(a))].join(','));
   const blob = new Blob(['﻿' + lines.join('\r\n')], { type: 'text/csv;charset=utf-8' });
@@ -365,6 +377,7 @@ async function loadPeriods() {
         ),
       ),
     );
+    asCards(table);
   } catch (err) {
     handleAuthError(err, $('periods-error'));
   }
@@ -404,7 +417,7 @@ function renderEmployees() {
     return;
   }
   table.replaceChildren(
-    el('thead', {}, el('tr', {}, el('th', {}, 'Họ tên'), el('th', {}, 'Số CCCD / SĐT'), el('th', {}, 'Trạng thái'), el('th', {}, 'Đăng nhập gần nhất'), el('th', {}, ''))),
+    el('thead', {}, el('tr', {}, el('th', {}, 'Họ tên'), el('th', {}, 'Số CCCD'), el('th', {}, 'Trạng thái'), el('th', {}, 'Đăng nhập gần nhất'), el('th', {}, ''))),
     el(
       'tbody',
       {},
@@ -426,6 +439,7 @@ function renderEmployees() {
       ),
     ),
   );
+  asCards(table);
 }
 
 async function resetCode(employee) {

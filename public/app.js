@@ -1,4 +1,4 @@
-import { api, el, formatPeriod, formatValue, hidePasswords, initPasswordToggles, loginIdLabel, normalizeLabel, showError } from './common.js';
+import { api, el, formatPeriod, formatValue, hidePasswords, initPasswordToggles, normalizeLabel, showError } from './common.js';
 
 const $ = (id) => document.getElementById(id);
 const views = ['loading', 'login-view', 'change-view', 'payslip-view'];
@@ -39,14 +39,36 @@ async function boot() {
   showPayslips();
 }
 
+const CCCD_LENGTH = 12;
+
+// Ô CCCD chỉ nhận chữ số, tối đa 12 số (dán "079 300 001 234" cũng được)
+function updateLoginIdCount() {
+  const count = $('login-id').value.length;
+  $('login-id-count').textContent = count === CCCD_LENGTH ? 'Đủ 12 số ✓' : `${count}/${CCCD_LENGTH} số`;
+  $('login-id-count').classList.toggle('ok', count === CCCD_LENGTH);
+}
+
+$('login-id').addEventListener('input', () => {
+  $('login-id').value = $('login-id').value.replace(/\D/g, '').slice(0, CCCD_LENGTH);
+  updateLoginIdCount();
+});
+
 $('login-form').addEventListener('submit', async (event) => {
   event.preventDefault();
   const button = event.submitter;
   showError($('login-error'), null);
+  if ($('login-id').value.length !== CCCD_LENGTH) {
+    return showError($('login-error'), new Error(`Số CCCD phải có đủ ${CCCD_LENGTH} chữ số.`));
+  }
   button.disabled = true;
   try {
     const password = $('login-password').value;
-    await api('/api/login', { method: 'POST', body: { loginId: $('login-id').value, password } });
+    const result = await api('/api/login', { method: 'POST', body: { loginId: $('login-id').value, password } });
+    // Tài khoản admin: sang trang quản lý
+    if (result.admin) {
+      location.href = '/admin';
+      return;
+    }
     lastLoginPassword = password;
     $('login-password').value = '';
     await boot();
@@ -105,7 +127,7 @@ $('logout').addEventListener('click', async () => {
 
 function showPayslips() {
   $('emp-name').textContent = profile.name || 'Nhân viên';
-  $('emp-id').textContent = `${loginIdLabel(profile.loginId)}: ${profile.loginId}`;
+  $('emp-id').textContent = `Số CCCD: ${profile.loginId}`;
   const select = $('period');
   select.replaceChildren(...profile.periods.map((p) => el('option', { value: p }, formatPeriod(p))));
   const hasAny = profile.periods.length > 0;

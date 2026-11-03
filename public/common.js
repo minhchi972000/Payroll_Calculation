@@ -28,11 +28,6 @@ export function formatValue(value) {
   return value === '' || value === null || value === undefined ? '—' : String(value);
 }
 
-// Tài khoản 12 số là CCCD, 10 số là SĐT
-export function loginIdLabel(loginId) {
-  return String(loginId).length === 12 ? 'Số CCCD' : 'SĐT';
-}
-
 export function formatPeriod(period) {
   const [y, m] = period.split('-');
   return `Tháng ${Number(m)}/${y}`;

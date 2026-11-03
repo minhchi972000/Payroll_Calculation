@@ -91,11 +91,17 @@ function validateNewPassword(password) {
 
 async function login(request, env) {
   const body = await readJson(request);
-  const loginId = normalizeLoginId(body.loginId);
   const password = String(body.password ?? '');
+  // Admin cũng đăng nhập được ở trang này, bằng tài khoản admin thay cho số CCCD
+  if (env.ADMIN_USERNAME && (await safeEqual(String(body.loginId ?? '').trim(), env.ADMIN_USERNAME.trim()))) {
+    return adminSignIn(request, env, body.loginId, password);
+  }
+
+  const loginId = normalizeLoginId(body.loginId);
   const ipKey = `ip:${clientIp(request)}`;
   const idKey = `id:${loginId}`;
-  if (!loginId || !password) throw new HttpError(400, 'Vui lòng nhập đúng số CCCD (hoặc số điện thoại) và mật khẩu.');
+  if (!loginId) throw new HttpError(400, 'Số CCCD phải có đủ 12 chữ số.');
+  if (!password) throw new HttpError(400, 'Vui lòng nhập mật khẩu.');
 
   if ((await isRateLimited(env.DB, ipKey, MAX_FAILS_PER_IP)) || (await isRateLimited(env.DB, idKey, MAX_FAILS_PER_ID))) {
     throw new HttpError(429, 'Bạn đã nhập sai quá nhiều lần. Vui lòng thử lại sau 15 phút.');
@@ -106,7 +112,7 @@ async function login(request, env) {
     .first();
   if (!employee || !(await verifyPassword(password, employee.password_hash))) {
     await Promise.all([recordFailure(env.DB, ipKey, LOGIN_WINDOW_SECONDS), recordFailure(env.DB, idKey, LOGIN_WINDOW_SECONDS)]);
-    throw new HttpError(401, 'Số CCCD/SĐT hoặc mật khẩu không đúng.');
+    throw new HttpError(401, 'Số CCCD hoặc mật khẩu không đúng.');
   }
 
   await clearFailures(env.DB, idKey);
@@ -194,26 +200,31 @@ async function payslip(request, env, url) {
 // ---------- Admin ----------
 
 async function adminLogin(request, env) {
+  const body = await readJson(request);
+  return adminSignIn(request, env, body.username, body.password);
+}
+
+// Dùng cho cả trang /admin và trang đăng nhập chung
+async function adminSignIn(request, env, username, password) {
   if (!env.ADMIN_USERNAME || !env.ADMIN_PASSWORD) {
     throw new HttpError(503, 'Chưa cấu hình tài khoản admin (ADMIN_USERNAME và ADMIN_PASSWORD).');
   }
-  const body = await readJson(request);
   const ipKey = `admin-ip:${clientIp(request)}`;
   if (await isRateLimited(env.DB, ipKey, MAX_FAILS_PER_ID)) {
     throw new HttpError(429, 'Nhập sai quá nhiều lần. Vui lòng thử lại sau 15 phút.');
   }
   // Luôn so cả hai để không lộ ra là sai tài khoản hay sai mật khẩu
   const [usernameOk, passwordOk] = await Promise.all([
-    safeEqual(String(body.username ?? '').trim(), env.ADMIN_USERNAME.trim()),
-    safeEqual(String(body.password ?? ''), env.ADMIN_PASSWORD),
+    safeEqual(String(username ?? '').trim(), env.ADMIN_USERNAME.trim()),
+    safeEqual(String(password ?? ''), env.ADMIN_PASSWORD),
   ]);
   if (!usernameOk || !passwordOk) {
     await recordFailure(env.DB, ipKey, LOGIN_WINDOW_SECONDS);
-    throw new HttpError(401, 'Tài khoản hoặc mật khẩu admin không đúng.');
+    throw new HttpError(401, 'Tài khoản hoặc mật khẩu không đúng.');
   }
   await clearFailures(env.DB, ipKey);
   const token = await createSession(env.DB, 'admin', 'admin', ADMIN_SESSION_SECONDS);
-  return json({ ok: true }, 200, { 'Set-Cookie': sessionCookie(ADMIN_COOKIE, token, ADMIN_SESSION_SECONDS) });
+  return json({ ok: true, admin: true }, 200, { 'Set-Cookie': sessionCookie(ADMIN_COOKIE, token, ADMIN_SESSION_SECONDS) });
 }
 
 async function adminLogout(request, env) {
@@ -392,7 +403,7 @@ async function route(request, env, url) {
 
   let m = pathname.match(/^\/api\/admin\/periods\/(\d{4}-\d{2})$/);
   if (m && method === 'DELETE') return adminDeletePeriod(request, env, m[1]);
-  // Tài khoản là SĐT (10 số) hoặc CCCD (12 số)
+  // Tài khoản nhân viên là số CCCD 12 chữ số. Vẫn nhận SĐT 10 số để quản lý tài khoản tạo từ bản cũ.
   m = pathname.match(/^\/api\/admin\/employees\/(0\d{9}|0\d{11})\/reset$/);
   if (m && method === 'POST') return adminResetCode(request, env, m[1]);
   m = pathname.match(/^\/api\/admin\/employees\/(0\d{9}|0\d{11})$/);
