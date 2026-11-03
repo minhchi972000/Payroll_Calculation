@@ -74,8 +74,8 @@ export function hidePasswords() {
   document.querySelectorAll('.password').forEach((wrap) => setPasswordVisible(wrap, false));
 }
 
-export function initPasswordToggles() {
-  document.querySelectorAll('.password').forEach((wrap) => {
+export function initPasswordToggles(root = document) {
+  root.querySelectorAll('.password').forEach((wrap) => {
     wrap.querySelector('button').addEventListener('click', () => {
       setPasswordVisible(wrap, wrap.querySelector('input').type === 'password');
     });

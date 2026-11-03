@@ -358,7 +358,12 @@ async function loadPeriods() {
             el('td', {}, p.count),
             el('td', {}, p.source),
             el('td', {}, formatDateTime(p.imported_at)),
-            el('td', { class: 'actions' }, el('button', { class: 'danger', type: 'button', onclick: () => deletePeriod(p.period) }, 'Xoá')),
+            el(
+              'td',
+              { class: 'actions' },
+              el('button', { class: 'ghost', type: 'button', onclick: (e) => exportPeriod(p.period, e.currentTarget) }, 'Xuất Excel'),
+              el('button', { class: 'danger', type: 'button', onclick: () => deletePeriod(p.period) }, 'Xoá'),
+            ),
           ),
         ),
       ),
@@ -366,6 +371,48 @@ async function loadPeriods() {
     asCards(table);
   } catch (err) {
     handleAuthError(err, $('periods-error'));
+  }
+}
+
+// Xuất bảng lương một kỳ ra Excel: cột Họ tên, Số CCCD rồi đúng các cột đã nhập, cuối cùng là dòng tổng.
+// File này nhập lại vào web được (dòng tổng tự bị bỏ qua).
+async function exportPeriod(period, button) {
+  showError($('periods-error'), null);
+  button.disabled = true;
+  try {
+    const { columns, rows } = await api(`/api/admin/periods/${period}/export`);
+    const header = ['STT', 'HỌ & TÊN', 'SỐ CCCD', ...columns];
+    const firstRow = 4; // dòng Excel của nhân viên đầu tiên (sau tiêu đề trang, dòng trống, tiêu đề cột)
+    const lastRow = firstRow + rows.length - 1;
+    const totals = columns.map((_, i) => {
+      const numeric = rows.length > 0 && rows.every((r) => typeof r.values[i] === 'number' || r.values[i] === '');
+      if (!numeric) return '';
+      const letter = XLSX.utils.encode_col(i + 3);
+      const sum = rows.reduce((s, r) => s + (typeof r.values[i] === 'number' ? r.values[i] : 0), 0);
+      return { t: 'n', v: sum, f: `SUM(${letter}${firstRow}:${letter}${lastRow})` };
+    });
+    const sheet = XLSX.utils.aoa_to_sheet([
+      [`BẢNG LƯƠNG ${formatPeriod(period).toUpperCase()}`],
+      [],
+      header,
+      ...rows.map((r, i) => [i + 1, r.name, r.loginId, ...r.values]),
+      ['', 'TỔNG CỘNG', '', ...totals],
+    ]);
+    // Tiền có dấu phân cách hàng nghìn; ngày, giờ để nguyên
+    for (const [ref, cell] of Object.entries(sheet)) {
+      if (ref.startsWith('!') || cell.t !== 'n') continue;
+      const { r, c } = XLSX.utils.decode_cell(ref);
+      if (r >= firstRow - 1 && c >= 3 && Number.isInteger(cell.v) && Math.abs(cell.v) >= 1000) cell.z = '#,##0';
+    }
+    sheet['!cols'] = header.map((h, i) => ({ wch: i === 0 ? 5 : i === 1 ? 24 : i === 2 ? 15 : Math.min(Math.max(String(h).length, 10), 22) }));
+    const [year, month] = period.split('-');
+    const book = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(book, sheet, `T${month}-${year}`);
+    XLSX.writeFile(book, `bang-luong-${period}.xlsx`);
+  } catch (err) {
+    handleAuthError(err, $('periods-error'));
+  } finally {
+    button.disabled = false;
   }
 }
 
@@ -428,20 +475,66 @@ function renderEmployees() {
   asCards(table);
 }
 
-async function resetPassword(employee) {
+// Khung đặt lại mật khẩu: về 6 số cuối CCCD, hoặc mật khẩu do admin tự đặt
+function resetPassword(employee) {
   const who = employee.name || employee.login_id;
-  if (!confirm(`Đặt lại mật khẩu của ${who} về 6 số cuối số CCCD? Mật khẩu cũ sẽ không dùng được nữa.`)) return;
-  try {
-    await api(`/api/admin/employees/${employee.login_id}/reset`, { method: 'POST' });
-    $('code-card').replaceChildren(
-      el('p', { class: 'success' }, `Đã đặt lại mật khẩu của ${who} (CCCD ${employee.login_id}) về 6 số cuối số CCCD. `,
-        'Lần đăng nhập tới, người đó sẽ phải đặt mật khẩu riêng.'),
-    );
-    $('code-card').hidden = false;
-    loadEmployees();
-  } catch (err) {
-    handleAuthError(err, $('employees-error'));
+  const card = $('code-card');
+  const input = el('input', { type: 'password', autocomplete: 'new-password', placeholder: 'Ít nhất 6 ký tự' });
+  const mustChange = el('input', { type: 'checkbox', checked: true });
+  const customWrap = el(
+    'div',
+    { hidden: true },
+    el('div', { class: 'password' }, input, el('button', { type: 'button', 'aria-label': 'Hiện mật khẩu', 'aria-pressed': 'false' }, 'Hiện')),
+    el('label', { class: 'choice' }, mustChange, 'Bắt nhân viên đặt mật khẩu riêng khi đăng nhập'),
+  );
+  const modeRadio = (value, text, checked) =>
+    el('label', { class: 'choice' }, el('input', { type: 'radio', name: 'reset-mode', value, checked, onchange: () => (customWrap.hidden = value !== 'custom') }), text);
+  const error = el('p', { class: 'error', hidden: true });
+
+  async function save(event) {
+    event.preventDefault();
+    const custom = card.querySelector('input[name="reset-mode"]:checked').value === 'custom';
+    if (custom && input.value.length < 6) return showError(error, new Error('Mật khẩu phải có ít nhất 6 ký tự.'));
+    const button = event.submitter;
+    button.disabled = true;
+    showError(error, null);
+    try {
+      const result = await api(`/api/admin/employees/${employee.login_id}/reset`, {
+        method: 'POST',
+        body: custom ? { password: input.value, mustChange: mustChange.checked } : {},
+      });
+      const how = result.custom ? 'mật khẩu admin vừa đặt' : '6 số cuối số CCCD';
+      const next = result.mustChange ? 'Lần đăng nhập tới, người đó sẽ phải đặt mật khẩu riêng.' : 'Người đó dùng luôn mật khẩu này để đăng nhập.';
+      card.replaceChildren(el('p', { class: 'success' }, `Đã đặt mật khẩu của ${who} (CCCD ${employee.login_id}) thành ${how}. ${next}`));
+      loadEmployees();
+    } catch (err) {
+      button.disabled = false;
+      if (err.status === 401) return show('login-view');
+      showError(error, err);
+    }
   }
+
+  card.replaceChildren(
+    el(
+      'form',
+      { onsubmit: save, novalidate: true },
+      el('h2', {}, `Đặt lại mật khẩu: ${who}`),
+      el('p', { class: 'muted' }, `Số CCCD ${employee.login_id}. Mật khẩu cũ sẽ không dùng được nữa.`),
+      modeRadio('cccd', '6 số cuối số CCCD (nhân viên phải đổi khi đăng nhập)', true),
+      modeRadio('custom', 'Mật khẩu do admin đặt', false),
+      customWrap,
+      el(
+        'div',
+        { class: 'row-actions' },
+        el('button', { class: 'primary', type: 'submit' }, 'Lưu mật khẩu'),
+        el('button', { class: 'ghost', type: 'button', onclick: () => (card.hidden = true) }, 'Huỷ'),
+      ),
+      error,
+    ),
+  );
+  initPasswordToggles(card);
+  card.hidden = false;
+  card.scrollIntoView({ behavior: 'smooth', block: 'start' });
 }
 
 async function deleteEmployee(employee) {

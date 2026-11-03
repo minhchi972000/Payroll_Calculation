@@ -207,6 +207,8 @@ button.link.more { display: block; margin: 14px auto 0; padding: 8px; }
 .tabs button.active { background: var(--text); color: #fff; border-color: var(--text); }
 
 .source-switch { display: flex; gap: 8px; margin-top: 4px; }
+label.choice { display: flex; align-items: center; gap: 8px; margin: 10px 0; font-weight: 500; cursor: pointer; }
+label.choice input { width: 18px; height: 18px; margin: 0; accent-color: var(--primary); }
 
 .visually-hidden { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
 .file-pick { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }

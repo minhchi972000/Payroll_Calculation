@@ -79,11 +79,16 @@ async function requireAdmin(request, env) {
   if (!session) throw new HttpError(401, 'Bạn chưa đăng nhập admin.');
 }
 
-function validateNewPassword(password, loginId) {
+function validatePasswordLength(password) {
   if (typeof password !== 'string' || password.length < MIN_PASSWORD_LENGTH) {
     throw new HttpError(400, `Mật khẩu mới phải có ít nhất ${MIN_PASSWORD_LENGTH} ký tự.`);
   }
   if (password.length > 128) throw new HttpError(400, 'Mật khẩu quá dài.');
+}
+
+// Mật khẩu nhân viên tự đặt
+function validateNewPassword(password, loginId) {
+  validatePasswordLength(password);
   if (password === initialPassword(loginId)) throw new HttpError(400, 'Mật khẩu mới không được là 6 số cuối số CCCD.');
 }
 
@@ -335,6 +340,22 @@ async function adminPeriods(request, env) {
   return json({ periods: results });
 }
 
+// Toàn bộ bảng lương một kỳ, theo đúng thứ tự dòng trong file đã nhập, để trang admin xuất ra Excel
+async function adminExportPeriod(request, env, period) {
+  await requireAdmin(request, env);
+  if (!isValidPeriod(period)) throw new HttpError(400, 'Kỳ lương không hợp lệ.');
+  const info = await env.DB.prepare('SELECT columns FROM periods WHERE period = ?').bind(period).first();
+  if (!info) throw new HttpError(404, 'Không có kỳ lương này.');
+  const { results } = await env.DB.prepare('SELECT login_id, name, "values" AS vals FROM payslips WHERE period = ? ORDER BY rowid')
+    .bind(period)
+    .all();
+  return json({
+    period,
+    columns: JSON.parse(info.columns),
+    rows: results.map((r) => ({ loginId: r.login_id, name: r.name, values: JSON.parse(r.vals) })),
+  });
+}
+
 async function adminDeletePeriod(request, env, period) {
   await requireAdmin(request, env);
   if (!isValidPeriod(period)) throw new HttpError(400, 'Kỳ lương không hợp lệ.');
@@ -353,20 +374,28 @@ async function adminEmployees(request, env) {
   return json({ employees: results });
 }
 
-async function adminResetCode(request, env, loginId) {
+// Không gửi mật khẩu: đặt về 6 số cuối CCCD (bắt đổi khi đăng nhập).
+// Có mật khẩu: admin tự đặt; mustChange = false thì nhân viên dùng luôn mật khẩu đó.
+async function adminResetPassword(request, env, loginId) {
   await requireAdmin(request, env);
   const employee = await env.DB.prepare('SELECT login_id, name FROM employees WHERE login_id = ?').bind(loginId).first();
   if (!employee) throw new HttpError(404, 'Không tìm thấy nhân viên.');
+  const body = (request.headers.get('Content-Type') || '').includes('application/json') ? await readJson(request) : {};
+  const custom = body.password !== undefined && body.password !== '';
+  if (custom) validatePasswordLength(body.password);
+  const mustChange = custom ? body.mustChange !== false : true;
+  const hash = custom ? await hashPassword(body.password) : await hashInitialCode(initialPassword(loginId));
   await env.DB.batch([
-    env.DB.prepare('UPDATE employees SET password_hash = ?, must_change_password = 1, updated_at = ? WHERE login_id = ?').bind(
-      await hashInitialCode(initialPassword(loginId)),
+    env.DB.prepare('UPDATE employees SET password_hash = ?, must_change_password = ?, updated_at = ? WHERE login_id = ?').bind(
+      hash,
+      mustChange ? 1 : 0,
       now(),
       loginId,
     ),
     env.DB.prepare("DELETE FROM sessions WHERE kind = 'employee' AND subject = ?").bind(loginId),
     env.DB.prepare('DELETE FROM rate_limits WHERE key = ?').bind(`id:${loginId}`),
   ]);
-  return json({ loginId, name: employee.name });
+  return json({ loginId, name: employee.name, custom, mustChange });
 }
 
 async function adminDeleteEmployee(request, env, loginId) {
@@ -399,11 +428,13 @@ async function route(request, env, url) {
   if (pathname === '/api/admin/periods' && method === 'GET') return adminPeriods(request, env);
   if (pathname === '/api/admin/employees' && method === 'GET') return adminEmployees(request, env);
 
-  let m = pathname.match(/^\/api\/admin\/periods\/(\d{4}-\d{2})$/);
+  let m = pathname.match(/^\/api\/admin\/periods\/(\d{4}-\d{2})\/export$/);
+  if (m && method === 'GET') return adminExportPeriod(request, env, m[1]);
+  m = pathname.match(/^\/api\/admin\/periods\/(\d{4}-\d{2})$/);
   if (m && method === 'DELETE') return adminDeletePeriod(request, env, m[1]);
   // Tài khoản nhân viên là số CCCD 12 chữ số. Vẫn nhận SĐT 10 số để quản lý tài khoản tạo từ bản cũ.
   m = pathname.match(/^\/api\/admin\/employees\/(0\d{9}|0\d{11})\/reset$/);
-  if (m && method === 'POST') return adminResetCode(request, env, m[1]);
+  if (m && method === 'POST') return adminResetPassword(request, env, m[1]);
   m = pathname.match(/^\/api\/admin\/employees\/(0\d{9}|0\d{11})$/);
   if (m && method === 'DELETE') return adminDeleteEmployee(request, env, m[1]);
 
