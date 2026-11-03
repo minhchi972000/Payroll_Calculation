@@ -39,9 +39,10 @@ Muốn dùng tên miền riêng (ví dụ `luong.congty.vn`): Cloudflare dashboa
 ## Quy trình hằng tháng
 
 1. Vào `/admin` → **Nhập bảng lương** → chọn tháng → chọn file Excel (hoặc dán link Google Sheet).
-2. Bấm **Kiểm tra dữ liệu**: xem số người, các cột nhân viên sẽ thấy, các dòng lỗi.
-3. Bấm **Xác nhận nhập**. Nhân viên xem được ngay.
-4. Nếu có nhân viên mới, hệ thống tạo tài khoản với **mật khẩu lần đầu là 6 số cuối số CCCD**.
+2. Bấm **Nhập bảng lương**. File hợp lệ thì nhập luôn, nhân viên xem được ngay.
+   File có lỗi (CCCD sai, trùng…) thì không nhập gì, web hiện danh sách lỗi để sửa.
+   Tháng đã có bảng lương thì web hỏi lại trước khi thay thế.
+3. Nếu có nhân viên mới, hệ thống tạo tài khoản với **mật khẩu lần đầu là 6 số cuối số CCCD**.
    Bấm **Sao chép tin nhắn** rồi gửi một tin hướng dẫn chung vào nhóm Zalo, không cần gửi riêng từng người.
 
 Nhân viên đăng nhập lần đầu bằng số CCCD + 6 số cuối CCCD, sau đó bắt buộc đặt mật khẩu riêng

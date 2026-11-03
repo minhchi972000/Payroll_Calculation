@@ -85,21 +85,18 @@
             Mọi cột còn lại sẽ hiện cho nhân viên, trừ cột “STT” và cột có tiêu đề bắt đầu bằng <b>#</b> (cột nội bộ).
             <a href="/mau-bang-luong.xlsx" download>Tải file mẫu bảng lương (.xlsx)</a>
           </p>
-          <button id="check-btn" class="primary w-240" type="button">Kiểm tra dữ liệu</button>
+          <button id="import-btn" class="primary w-240" type="button">Nhập bảng lương</button>
           <p id="import-error" class="error" hidden></p>
         </div>
 
+        <!-- File có lỗi: không nhập gì, chỉ hiện lỗi để sửa -->
         <div id="summary-card" class="card" hidden>
-          <h2>2. Kiểm tra trước khi nhập</h2>
+          <h2>Chưa nhập được</h2>
           <div id="summary"></div>
-          <div class="row-actions">
-            <button id="confirm-btn" class="primary" type="button">Xác nhận nhập</button>
-          </div>
-          <p id="confirm-error" class="error" hidden></p>
         </div>
 
         <div id="result-card" class="card" hidden>
-          <h2>3. Đã nhập xong</h2>
+          <h2>2. Đã nhập xong</h2>
           <div id="result"></div>
         </div>
       </div>

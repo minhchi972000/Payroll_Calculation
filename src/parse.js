@@ -7,6 +7,8 @@ const CCCD_HEADERS = [
 const NAME_HEADERS = ['ho ten', 'ho va ten', 'ten', 'ten nhan vien', 'ho ten nhan vien', 'ho va ten nhan vien', 'nhan vien', 'name', 'full name'];
 // So sánh sau khi bỏ khoảng trắng, vì tiêu đề hẹp hay bị xuống dòng thành "ST T"
 const SKIPPED_HEADERS = ['stt', 'tt'];
+// Dòng tổng cộng cuối bảng được bỏ qua mà không cần báo
+const TOTAL_LABELS = ['tong', 'tong cong'];
 const HEADER_SCAN_ROWS = 20;
 
 export function normalizeText(value) {
@@ -138,6 +140,7 @@ export function parsePayrollTable(rows) {
     const excelRow = r + 1;
     const rawId = cleanCell(row[header.idCol]);
     if (!/\d/.test(String(rawId))) {
+      if (row.some((cell) => TOTAL_LABELS.includes(normalizeText(cell)))) continue;
       warnings.push(`Dòng ${excelRow}: không có ${idLabel}, đã bỏ qua (thường là dòng tổng cộng hoặc tên phòng ban).`);
       continue;
     }

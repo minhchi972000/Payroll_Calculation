@@ -374,8 +374,8 @@ async function adminEmployees(request, env) {
   return json({ employees: results });
 }
 
-// Không gửi mật khẩu: đặt về 6 số cuối CCCD (bắt đổi khi đăng nhập).
-// Có mật khẩu: admin tự đặt; mustChange = false thì nhân viên dùng luôn mật khẩu đó.
+// Không gửi mật khẩu: đặt về 6 số cuối CCCD (ai biết CCCD cũng đoán được nên bắt đổi khi đăng nhập).
+// Có mật khẩu: admin tự đặt, nhân viên dùng luôn mật khẩu đó, không phải đổi.
 async function adminResetPassword(request, env, loginId) {
   await requireAdmin(request, env);
   const employee = await env.DB.prepare('SELECT login_id, name FROM employees WHERE login_id = ?').bind(loginId).first();
@@ -383,7 +383,7 @@ async function adminResetPassword(request, env, loginId) {
   const body = (request.headers.get('Content-Type') || '').includes('application/json') ? await readJson(request) : {};
   const custom = body.password !== undefined && body.password !== '';
   if (custom) validatePasswordLength(body.password);
-  const mustChange = custom ? body.mustChange !== false : true;
+  const mustChange = !custom;
   const hash = custom ? await hashPassword(body.password) : await hashInitialCode(initialPassword(loginId));
   await env.DB.batch([
     env.DB.prepare('UPDATE employees SET password_hash = ?, must_change_password = ?, updated_at = ? WHERE login_id = ?').bind(

@@ -1,10 +1,9 @@
-import { api, el, formatDateTime, formatPeriod, formatValue, hidePasswords, initPasswordToggles, showError } from '../common.js';
+import { api, el, formatDateTime, formatPeriod, hidePasswords, initPasswordToggles, showError } from '../common.js';
 
 const $ = (id) => document.getElementById(id);
 
 let config = { googleServiceAccount: null };
 let workbook = null;
-let pendingImport = null;
 let employees = [];
 
 function show(view) {
@@ -112,7 +111,6 @@ document.querySelectorAll('input[name="source"]').forEach((radio) => {
 });
 
 function resetImportSteps() {
-  pendingImport = null;
   $('summary-card').hidden = true;
   $('result-card').hidden = true;
   showError($('import-error'), null);
@@ -201,15 +199,25 @@ function buildImportRequest() {
   };
 }
 
-$('check-btn').addEventListener('click', async (event) => {
+// Một bước: bấm là nhập luôn. Server tự kiểm tra; file có lỗi thì không nhập gì và trả về danh sách lỗi.
+$('import-btn').addEventListener('click', async (event) => {
   const button = event.currentTarget;
   resetImportSteps();
   button.disabled = true;
   try {
     const request = buildImportRequest();
-    const summary = await api('/api/admin/import', { method: 'POST', body: { ...request, dryRun: true } });
-    pendingImport = request;
-    renderSummary(summary);
+    // Tháng đã có bảng lương thì hỏi lại trước khi thay thế
+    const { periods } = await api('/api/admin/periods');
+    const existing = periods.find((p) => p.period === request.period);
+    if (
+      existing &&
+      !confirm(`${formatPeriod(request.period)} đã có bảng lương của ${existing.count} người. Nhập file này sẽ thay thế toàn bộ dữ liệu cũ của tháng đó. Tiếp tục?`)
+    ) {
+      return;
+    }
+    const result = await api('/api/admin/import', { method: 'POST', body: { ...request, dryRun: false } });
+    if (result.imported) renderResult(result);
+    else renderErrors(result);
   } catch (err) {
     handleAuthError(err, $('import-error'));
   } finally {
@@ -228,58 +236,16 @@ function messageList(title, items, cls) {
   );
 }
 
-function renderSummary(s) {
-  const blocks = [
-    el('p', {}, `${formatPeriod(s.period)} · Nguồn: ${s.source}`),
-    el(
-      'p',
-      {},
-      el('b', {}, `${s.rowCount} nhân viên`),
-      s.newEmployeeCount ? ` (trong đó ${s.newEmployeeCount} người mới, hệ thống sẽ tạo mã đăng nhập)` : '',
-    ),
-    s.idLabel ? el('p', { class: 'muted' }, `Nhân viên đăng nhập bằng cột: ${s.idLabel}`) : null,
-    s.replacesExisting ? el('p', { class: 'notice' }, `${formatPeriod(s.period)} đã có dữ liệu của ${s.replacesExisting} người. Nhập lại sẽ thay thế toàn bộ dữ liệu cũ của kỳ này.`) : null,
-    el('div', {}, el('span', { class: 'muted' }, `Các cột nhân viên sẽ thấy (${s.columns.length}):`), el('div', { class: 'chips' }, s.columns.map((c) => el('span', {}, c)))),
-    messageList('Lỗi cần sửa trong file:', s.errors, 'error'),
-    messageList('Lưu ý:', s.warnings, 'notice'),
-  ];
-  if (s.preview.length) {
-    const first = s.preview[0];
-    blocks.push(
-      el('p', { class: 'muted' }, `Xem trước dòng đầu tiên: ${first.name || ''} · ${s.idLabel} ${first.loginId}`),
-      el(
-        'div',
-        { class: 'table-scroll' },
-        el('table', {}, el('tbody', {}, s.columns.map((label, i) => el('tr', {}, el('th', {}, label), el('td', {}, formatValue(first.values[i])))))),
-      ),
-    );
-  }
-  $('summary').replaceChildren(...blocks.filter(Boolean));
-  $('confirm-btn').hidden = s.errors.length > 0;
-  showError($('confirm-error'), null);
+function renderErrors(s) {
+  $('summary').replaceChildren(
+    ...[
+      el('p', { class: 'muted' }, `${formatPeriod(s.period)} · Nguồn: ${s.source}. Chưa có gì được nhập, dữ liệu cũ giữ nguyên.`),
+      messageList('Lỗi cần sửa trong file, sửa xong bấm Nhập bảng lương lại:', s.errors, 'error'),
+      messageList('Lưu ý:', s.warnings, 'notice'),
+    ].filter(Boolean),
+  );
   $('summary-card').hidden = false;
 }
-
-$('confirm-btn').addEventListener('click', async (event) => {
-  if (!pendingImport) return;
-  const button = event.currentTarget;
-  button.disabled = true;
-  showError($('confirm-error'), null);
-  try {
-    const result = await api('/api/admin/import', { method: 'POST', body: { ...pendingImport, dryRun: false } });
-    if (!result.imported) {
-      renderSummary(result);
-      return;
-    }
-    pendingImport = null;
-    $('summary-card').hidden = true;
-    renderResult(result);
-  } catch (err) {
-    handleAuthError(err, $('confirm-error'));
-  } finally {
-    button.disabled = false;
-  }
-});
 
 // Tin nhắn chung gửi cả nhóm (Zalo): mật khẩu ban đầu là 6 số cuối CCCD nên không cần gửi riêng
 function loginMessage() {
@@ -315,7 +281,15 @@ function accountsTable(accounts) {
 }
 
 function renderResult(r) {
-  const blocks = [el('p', { class: 'success' }, `Đã nhập ${r.rowCount} phiếu lương cho ${formatPeriod(r.period)}. Nhân viên đã có thể xem ngay.`)];
+  const blocks = [
+    el(
+      'p',
+      { class: 'success' },
+      `Đã nhập ${r.rowCount} phiếu lương cho ${formatPeriod(r.period)} (${r.columns.length} cột). Nhân viên đã có thể xem ngay.`,
+      r.replacesExisting ? ` Dữ liệu cũ của ${r.replacesExisting} người trong tháng này đã được thay thế.` : '',
+    ),
+    messageList('Lưu ý:', r.warnings, 'notice'),
+  ].filter(Boolean);
   if (r.newAccounts.length) {
     blocks.push(
       el(
@@ -480,12 +454,10 @@ function resetPassword(employee) {
   const who = employee.name || employee.login_id;
   const card = $('code-card');
   const input = el('input', { type: 'password', autocomplete: 'new-password', placeholder: 'Ít nhất 6 ký tự' });
-  const mustChange = el('input', { type: 'checkbox', checked: true });
   const customWrap = el(
     'div',
     {},
     el('div', { class: 'password' }, input, el('button', { type: 'button', 'aria-label': 'Hiện mật khẩu', 'aria-pressed': 'false' }, 'Hiện')),
-    el('label', { class: 'choice' }, mustChange, 'Bắt nhân viên đặt mật khẩu riêng khi đăng nhập'),
   );
   const modeRadio = (value, text, checked) =>
     el('label', { class: 'choice' }, el('input', { type: 'radio', name: 'reset-mode', value, checked, onchange: () => (customWrap.hidden = value !== 'custom') }), text);
@@ -501,11 +473,12 @@ function resetPassword(employee) {
     try {
       const result = await api(`/api/admin/employees/${employee.login_id}/reset`, {
         method: 'POST',
-        body: custom ? { password: input.value, mustChange: mustChange.checked } : {},
+        body: custom ? { password: input.value } : {},
       });
-      const how = result.custom ? 'mật khẩu admin vừa đặt' : '6 số cuối số CCCD';
-      const next = result.mustChange ? 'Lần đăng nhập tới, người đó sẽ phải đặt mật khẩu riêng.' : 'Người đó dùng luôn mật khẩu này để đăng nhập.';
-      card.replaceChildren(el('p', { class: 'success' }, `Đã đặt mật khẩu của ${who} (CCCD ${employee.login_id}) thành ${how}. ${next}`));
+      const text = result.custom
+        ? `Đã đặt mật khẩu mới cho ${who} (CCCD ${employee.login_id}). Người đó đăng nhập bằng mật khẩu này, không phải đổi.`
+        : `Đã đưa mật khẩu của ${who} (CCCD ${employee.login_id}) về 6 số cuối số CCCD. Lần đăng nhập tới, người đó sẽ phải đặt mật khẩu riêng.`;
+      card.replaceChildren(el('p', { class: 'success' }, text));
       loadEmployees();
     } catch (err) {
       button.disabled = false;
@@ -520,7 +493,7 @@ function resetPassword(employee) {
       { onsubmit: save, novalidate: true },
       el('h2', {}, `Đổi mật khẩu: ${who}`),
       el('p', { class: 'muted' }, `Số CCCD ${employee.login_id}. Mật khẩu cũ sẽ không dùng được nữa.`),
-      modeRadio('custom', 'Mật khẩu do admin đặt', true),
+      modeRadio('custom', 'Mật khẩu do admin đặt (nhân viên dùng luôn, không phải đổi)', true),
       customWrap,
       modeRadio('cccd', 'Đưa về 6 số cuối số CCCD (nhân viên phải đổi khi đăng nhập)', false),
       el(

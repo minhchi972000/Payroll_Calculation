@@ -45,8 +45,7 @@ test('bảng đơn giản có dòng tiêu đề trang, STT, cột ẩn, dòng t�
   assert.equal(out.records.length, 2);
   assert.deepEqual(out.records[0], { loginId: '079300001234', name: 'Nguyễn Văn A', values: [10000000, 9500000] });
   assert.equal(out.records[1].loginId, '036095004567');
-  assert.equal(out.warnings.length, 1);
-  assert.match(out.warnings[0], /Dòng 6/);
+  assert.deepEqual(out.warnings, []); // dòng "Tổng cộng" bỏ qua mà không báo
 });
 
 test('tiêu đề 2 tầng (ô gộp đã được điền)', () => {
@@ -131,7 +130,7 @@ test('mẫu bảng lương có cột Số CCCD', () => {
     values: ['KT', 5310000, 0, 26, 0, 0, 1, 12.5, '', 0, 6481500],
   });
   assert.equal(out.records[1].loginId, '001300000001');
-  assert.match(out.warnings[0], /Dòng 7: không có Số CCCD/);
+  assert.deepEqual(out.warnings, []); // dòng TỔNG CỘNG bỏ qua mà không báo
 });
 
 test('cột SĐT nằm cạnh cột CCCD hiện như cột bình thường', () => {
