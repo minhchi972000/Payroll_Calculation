@@ -17,9 +17,13 @@
     <section id="login-view" class="card narrow" hidden>
       <h2>Đăng nhập admin</h2>
       <form id="login-form" novalidate>
-        <input type="text" autocomplete="username" value="admin" hidden>
+        <label for="admin-username">Tài khoản admin</label>
+        <input id="admin-username" type="text" autocomplete="username" autocapitalize="off" spellcheck="false" required>
         <label for="admin-password">Mật khẩu admin</label>
-        <input id="admin-password" type="password" autocomplete="current-password" required>
+        <div class="password">
+          <input id="admin-password" type="password" autocomplete="current-password" required>
+          <button type="button" aria-label="Hiện mật khẩu" aria-pressed="false">Hiện</button>
+        </div>
         <button class="primary" type="submit">Đăng nhập</button>
         <p id="login-error" class="error" hidden></p>
       </form>
@@ -72,8 +76,9 @@
           </div>
 
           <p class="muted">
-            File cần có một dòng tiêu đề, trong đó có cột <b>SĐT</b> (hoặc “Số điện thoại”) và <b>Họ tên</b>.
+            File cần có một dòng tiêu đề, trong đó có cột <b>Số CCCD</b> (hoặc <b>SĐT</b>) và <b>Họ tên</b>. Nhân viên đăng nhập bằng số trong cột này.
             Mọi cột còn lại sẽ hiện cho nhân viên, trừ cột “STT” và cột có tiêu đề bắt đầu bằng <b>#</b> (cột nội bộ).
+            <a href="/mau-bang-luong.xlsx" download>Tải file mẫu bảng lương (.xlsx)</a>
           </p>
           <button id="check-btn" class="primary w-240" type="button">Kiểm tra dữ liệu</button>
           <p id="import-error" class="error" hidden></p>
@@ -108,7 +113,7 @@
         <div id="code-card" class="card" hidden></div>
         <div class="card">
           <h2>Nhân viên</h2>
-          <input id="employee-search" class="w-320" type="search" placeholder="Tìm theo tên hoặc SĐT">
+          <input id="employee-search" class="w-320" type="search" placeholder="Tìm theo tên, số CCCD hoặc SĐT">
           <div class="table-scroll mt-12"><table id="employees-table"></table></div>
           <p id="employees-error" class="error" hidden></p>
         </div>

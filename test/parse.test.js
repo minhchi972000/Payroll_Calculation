@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { isValidPeriod, normalizePhone, parsePayrollTable } from '../src/parse.js';
+import { isValidPeriod, normalizeCccd, normalizeLoginId, normalizePhone, parsePayrollTable } from '../src/parse.js';
 
 test('chuẩn hoá SĐT', () => {
   assert.equal(normalizePhone('0901 234 567'), '0901234567');
@@ -10,6 +10,25 @@ test('chuẩn hoá SĐT', () => {
   assert.equal(normalizePhone('12345'), null);
   assert.equal(normalizePhone(''), null);
   assert.equal(normalizePhone(null), null);
+});
+
+test('chuẩn hoá CCCD', () => {
+  assert.equal(normalizeCccd('079300001234'), '079300001234');
+  assert.equal(normalizeCccd('079 300 001 234'), '079300001234');
+  assert.equal(normalizeCccd(79300001234), '079300001234'); // Excel làm mất số 0
+  assert.equal(normalizeCccd(1300000001), '001300000001'); // mã tỉnh 001 mất 2 số 0
+  assert.equal(normalizeCccd('0901234567'), null); // SĐT nhập nhầm vào cột CCCD
+  assert.equal(normalizeCccd('123456789'), null); // CMND 9 số cũ
+  assert.equal(normalizeCccd('179300001234'), null);
+  assert.equal(normalizeCccd(''), null);
+});
+
+test('tên đăng nhập: 12 số là CCCD, còn lại là SĐT', () => {
+  assert.equal(normalizeLoginId(' 079300001234 '), '079300001234');
+  assert.equal(normalizeLoginId('0901 234 567'), '0901234567');
+  assert.equal(normalizeLoginId('+84 901 234 567'), '0901234567');
+  assert.equal(normalizeLoginId('79300001234'), null);
+  assert.equal(normalizeLoginId(undefined), null);
 });
 
 test('kỳ lương', () => {
@@ -30,10 +49,11 @@ test('bảng đơn giản có dòng tiêu đề trang, STT, cột ẩn, dòng t�
   ];
   const out = parsePayrollTable(rows);
   assert.deepEqual(out.errors, []);
+  assert.equal(out.idLabel, 'SĐT');
   assert.deepEqual(out.columns, ['Lương cơ bản', 'Thực lĩnh']);
   assert.equal(out.records.length, 2);
-  assert.deepEqual(out.records[0], { phone: '0901234567', name: 'Nguyễn Văn A', values: [10000000, 9500000] });
-  assert.equal(out.records[1].phone, '0912345678');
+  assert.deepEqual(out.records[0], { loginId: '0901234567', name: 'Nguyễn Văn A', values: [10000000, 9500000] });
+  assert.equal(out.records[1].loginId, '0912345678');
   assert.equal(out.warnings.length, 1);
   assert.match(out.warnings[0], /Dòng 6/);
 });
@@ -77,8 +97,58 @@ test('báo lỗi SĐT sai và trùng', () => {
   assert.match(out.errors[1], /Dòng 4.*trùng với dòng 2/);
 });
 
-test('không có cột SĐT', () => {
+test('không có cột CCCD hay SĐT', () => {
   const out = parsePayrollTable([['Họ tên', 'Lương'], ['A', 1]]);
   assert.equal(out.records.length, 0);
-  assert.match(out.errors[0], /Không tìm thấy cột số điện thoại/);
+  assert.match(out.errors[0], /Không tìm thấy cột số CCCD hoặc số điện thoại/);
+});
+
+// Giống bảng lương thật của công ty: đăng nhập bằng CCCD, tiêu đề 2 tầng có chữ Trung,
+// cột STT hẹp bị xuống dòng thành "ST T", các ô gộp dọc đã được điền xuống dòng dưới.
+test('mẫu bảng lương có cột Số CCCD', () => {
+  const top = ['ST\nT', 'HỌ &TÊN', 'SỐ CCCD', 'CHỨC VỤ', 'LƯƠNG CƠ BẢN', 'NGÀY CÔNG 天数', 'NGÀY CÔNG 天数', 'NGÀY CÔNG 天数',
+    'NGHỈ PHÉP 休假', 'NGHỈ PHÉP 休假', '', 'KHÁC 其他 thuong le-Tet', 'TRỪ TIỀN TẠM ỨNG - LÀM THIẾU GIỜ', 'THỰC LÃNH'];
+  const sub = ['ST\nT', 'HỌ &TÊN', 'SỐ CCCD', 'CHỨC VỤ', 'LƯƠNG CƠ BẢN', 'ĐÊM', 'NGÀY', 'TC',
+    'XIN PHÉP', 'PHÉP NĂM', 'GIỜ TC NGÀY', 'KHÁC 其他 thuong le-Tet', 'TRỪ TIỀN TẠM ỨNG - LÀM THIẾU GIỜ', 'THỰC LÃNH'];
+  const rows = [
+    ['CÔNG TY TNHH ABC'],
+    ['BẢNG LƯƠNG THÁNG 10/2026'],
+    top,
+    sub,
+    [29, 'NGUYỄN THỊ\nHOA', '079300001234', 'KT', 5310000, 0, 26, 0, 0, 1, 12.5, '', 0, 6481500],
+    [30, 'TRẦN VĂN B', 1300000001, 'CN', 4960000, 8, 18, 2, 1, 0, 20, 500000, 200000, 7120000],
+    ['', 'TỔNG CỘNG', '', '', 10270000, 8, 44, 2, 1, 1, 32.5, 500000, 200000, 13601500],
+  ];
+  const out = parsePayrollTable(rows);
+  assert.deepEqual(out.errors, []);
+  assert.equal(out.idLabel, 'Số CCCD');
+  assert.deepEqual(out.columns, [
+    'CHỨC VỤ', 'LƯƠNG CƠ BẢN', 'NGÀY CÔNG 天数 - ĐÊM', 'NGÀY CÔNG 天数 - NGÀY', 'NGÀY CÔNG 天数 - TC',
+    'NGHỈ PHÉP 休假 - XIN PHÉP', 'NGHỈ PHÉP 休假 - PHÉP NĂM', 'GIỜ TC NGÀY', 'KHÁC 其他 thuong le-Tet',
+    'TRỪ TIỀN TẠM ỨNG - LÀM THIẾU GIỜ', 'THỰC LÃNH',
+  ]);
+  assert.equal(out.records.length, 2);
+  assert.deepEqual(out.records[0], {
+    loginId: '079300001234',
+    name: 'NGUYỄN THỊ HOA',
+    values: ['KT', 5310000, 0, 26, 0, 0, 1, 12.5, '', 0, 6481500],
+  });
+  assert.equal(out.records[1].loginId, '001300000001');
+  assert.match(out.warnings[0], /Dòng 7: không có Số CCCD/);
+});
+
+test('có cả cột CCCD và SĐT thì đăng nhập bằng CCCD', () => {
+  const rows = [
+    ['Họ tên', 'SĐT', 'Số CCCD', 'Lương'],
+    ['A', '0901234567', '079300001234', 1],
+  ];
+  const out = parsePayrollTable(rows);
+  assert.equal(out.idLabel, 'Số CCCD');
+  assert.deepEqual(out.columns, ['SĐT', 'Lương']);
+  assert.equal(out.records[0].loginId, '079300001234');
+});
+
+test('CCCD sai độ dài báo lỗi rõ ràng', () => {
+  const out = parsePayrollTable([['Họ tên', 'Số CCCD', 'Lương'], ['A', '123456789', 1]]);
+  assert.match(out.errors[0], /Dòng 2: Số CCCD "123456789" không hợp lệ \(cần đủ 12 chữ số\)/);
 });

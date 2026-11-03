@@ -20,10 +20,10 @@ import {
   verifyPassword,
 } from './auth.js';
 import { fetchSheetRows, readServiceAccount } from './gsheet.js';
-import { isValidPeriod, normalizePhone, parsePayrollTable } from './parse.js';
+import { isValidPeriod, normalizeLoginId, parsePayrollTable } from './parse.js';
 
 const LOGIN_WINDOW_SECONDS = 15 * 60;
-const MAX_FAILS_PER_PHONE = 5;
+const MAX_FAILS_PER_ID = 5;
 const MAX_FAILS_PER_IP = 100;
 const MIN_PASSWORD_LENGTH = 6;
 const MAX_IMPORT_ROWS = 5000;
@@ -67,7 +67,7 @@ function checkOrigin(request) {
 async function requireEmployee(request, env) {
   const session = await getSession(env.DB, request, 'employee');
   if (!session) throw new HttpError(401, 'Bạn chưa đăng nhập.');
-  const employee = await env.DB.prepare('SELECT phone, name, must_change_password FROM employees WHERE phone = ?')
+  const employee = await env.DB.prepare('SELECT login_id, name, must_change_password FROM employees WHERE login_id = ?')
     .bind(session.subject)
     .first();
   if (!employee) throw new HttpError(401, 'Tài khoản không còn tồn tại.');
@@ -91,30 +91,30 @@ function validateNewPassword(password) {
 
 async function login(request, env) {
   const body = await readJson(request);
-  const phone = normalizePhone(body.phone);
+  const loginId = normalizeLoginId(body.loginId);
   const password = String(body.password ?? '');
   const ipKey = `ip:${clientIp(request)}`;
-  const phoneKey = `phone:${phone}`;
-  if (!phone || !password) throw new HttpError(400, 'Vui lòng nhập số điện thoại và mật khẩu.');
+  const idKey = `id:${loginId}`;
+  if (!loginId || !password) throw new HttpError(400, 'Vui lòng nhập đúng số CCCD (hoặc số điện thoại) và mật khẩu.');
 
-  if ((await isRateLimited(env.DB, ipKey, MAX_FAILS_PER_IP)) || (await isRateLimited(env.DB, phoneKey, MAX_FAILS_PER_PHONE))) {
+  if ((await isRateLimited(env.DB, ipKey, MAX_FAILS_PER_IP)) || (await isRateLimited(env.DB, idKey, MAX_FAILS_PER_ID))) {
     throw new HttpError(429, 'Bạn đã nhập sai quá nhiều lần. Vui lòng thử lại sau 15 phút.');
   }
 
-  const employee = await env.DB.prepare('SELECT phone, password_hash, must_change_password FROM employees WHERE phone = ?')
-    .bind(phone)
+  const employee = await env.DB.prepare('SELECT login_id, password_hash, must_change_password FROM employees WHERE login_id = ?')
+    .bind(loginId)
     .first();
   if (!employee || !(await verifyPassword(password, employee.password_hash))) {
-    await Promise.all([recordFailure(env.DB, ipKey, LOGIN_WINDOW_SECONDS), recordFailure(env.DB, phoneKey, LOGIN_WINDOW_SECONDS)]);
-    throw new HttpError(401, 'Số điện thoại hoặc mật khẩu không đúng.');
+    await Promise.all([recordFailure(env.DB, ipKey, LOGIN_WINDOW_SECONDS), recordFailure(env.DB, idKey, LOGIN_WINDOW_SECONDS)]);
+    throw new HttpError(401, 'Số CCCD/SĐT hoặc mật khẩu không đúng.');
   }
 
-  await clearFailures(env.DB, phoneKey);
+  await clearFailures(env.DB, idKey);
   await env.DB.batch([
     env.DB.prepare('DELETE FROM sessions WHERE expires_at < ?').bind(now()),
-    env.DB.prepare('UPDATE employees SET last_login_at = ? WHERE phone = ?').bind(now(), phone),
+    env.DB.prepare('UPDATE employees SET last_login_at = ? WHERE login_id = ?').bind(now(), loginId),
   ]);
-  const token = await createSession(env.DB, 'employee', phone, EMPLOYEE_SESSION_SECONDS);
+  const token = await createSession(env.DB, 'employee', loginId, EMPLOYEE_SESSION_SECONDS);
   return json(
     { mustChangePassword: Boolean(employee.must_change_password) },
     200,
@@ -129,11 +129,11 @@ async function logout(request, env) {
 
 async function me(request, env) {
   const employee = await requireEmployee(request, env);
-  const { results } = await env.DB.prepare('SELECT period FROM payslips WHERE phone = ? ORDER BY period DESC')
-    .bind(employee.phone)
+  const { results } = await env.DB.prepare('SELECT period FROM payslips WHERE login_id = ? ORDER BY period DESC')
+    .bind(employee.login_id)
     .all();
   return json({
-    phone: employee.phone,
+    loginId: employee.login_id,
     name: employee.name,
     mustChangePassword: Boolean(employee.must_change_password),
     periods: employee.must_change_password ? [] : results.map((r) => r.period),
@@ -143,23 +143,23 @@ async function me(request, env) {
 async function changePassword(request, env) {
   const employee = await requireEmployee(request, env);
   const body = await readJson(request);
-  const row = await env.DB.prepare('SELECT password_hash FROM employees WHERE phone = ?').bind(employee.phone).first();
+  const row = await env.DB.prepare('SELECT password_hash FROM employees WHERE login_id = ?').bind(employee.login_id).first();
   if (!(await verifyPassword(String(body.currentPassword ?? ''), row.password_hash))) {
     throw new HttpError(400, 'Mật khẩu hiện tại không đúng.');
   }
   validateNewPassword(body.newPassword);
 
   const hash = await hashPassword(body.newPassword);
-  const token = await createSession(env.DB, 'employee', employee.phone, EMPLOYEE_SESSION_SECONDS);
+  const token = await createSession(env.DB, 'employee', employee.login_id, EMPLOYEE_SESSION_SECONDS);
   // Đăng xuất mọi thiết bị khác, giữ lại phiên vừa tạo
   await env.DB.batch([
-    env.DB.prepare('UPDATE employees SET password_hash = ?, must_change_password = 0, updated_at = ? WHERE phone = ?').bind(
+    env.DB.prepare('UPDATE employees SET password_hash = ?, must_change_password = 0, updated_at = ? WHERE login_id = ?').bind(
       hash,
       now(),
-      employee.phone,
+      employee.login_id,
     ),
     env.DB.prepare("DELETE FROM sessions WHERE kind = 'employee' AND subject = ? AND token_hash != ?").bind(
-      employee.phone,
+      employee.login_id,
       await sha256Hex(token),
     ),
   ]);
@@ -172,12 +172,12 @@ async function payslip(request, env, url) {
   const period = url.searchParams.get('period');
   if (!isValidPeriod(period)) throw new HttpError(400, 'Kỳ lương không hợp lệ.');
 
-  // Luôn lọc theo SĐT trong phiên đăng nhập, không bao giờ theo tham số từ trình duyệt
+  // Luôn lọc theo tài khoản trong phiên đăng nhập, không bao giờ theo tham số từ trình duyệt
   const row = await env.DB.prepare(
     `SELECT p.name, p."values" AS vals, d.columns FROM payslips p JOIN periods d ON d.period = p.period
-     WHERE p.period = ? AND p.phone = ?`,
+     WHERE p.period = ? AND p.login_id = ?`,
   )
-    .bind(period, employee.phone)
+    .bind(period, employee.login_id)
     .first();
   if (!row) throw new HttpError(404, 'Không có bảng lương cho kỳ này.');
 
@@ -186,7 +186,7 @@ async function payslip(request, env, url) {
   return json({
     period,
     name: row.name || employee.name,
-    phone: employee.phone,
+    loginId: employee.login_id,
     items: columns.map((label, i) => ({ label, value: values[i] ?? '' })),
   });
 }
@@ -194,15 +194,22 @@ async function payslip(request, env, url) {
 // ---------- Admin ----------
 
 async function adminLogin(request, env) {
-  if (!env.ADMIN_PASSWORD) throw new HttpError(503, 'Chưa cấu hình ADMIN_PASSWORD cho hệ thống.');
+  if (!env.ADMIN_USERNAME || !env.ADMIN_PASSWORD) {
+    throw new HttpError(503, 'Chưa cấu hình tài khoản admin (ADMIN_USERNAME và ADMIN_PASSWORD).');
+  }
   const body = await readJson(request);
   const ipKey = `admin-ip:${clientIp(request)}`;
-  if (await isRateLimited(env.DB, ipKey, MAX_FAILS_PER_PHONE)) {
+  if (await isRateLimited(env.DB, ipKey, MAX_FAILS_PER_ID)) {
     throw new HttpError(429, 'Nhập sai quá nhiều lần. Vui lòng thử lại sau 15 phút.');
   }
-  if (!(await safeEqual(String(body.password ?? ''), env.ADMIN_PASSWORD))) {
+  // Luôn so cả hai để không lộ ra là sai tài khoản hay sai mật khẩu
+  const [usernameOk, passwordOk] = await Promise.all([
+    safeEqual(String(body.username ?? '').trim(), env.ADMIN_USERNAME.trim()),
+    safeEqual(String(body.password ?? ''), env.ADMIN_PASSWORD),
+  ]);
+  if (!usernameOk || !passwordOk) {
     await recordFailure(env.DB, ipKey, LOGIN_WINDOW_SECONDS);
-    throw new HttpError(401, 'Mật khẩu admin không đúng.');
+    throw new HttpError(401, 'Tài khoản hoặc mật khẩu admin không đúng.');
   }
   await clearFailures(env.DB, ipKey);
   const token = await createSession(env.DB, 'admin', 'admin', ADMIN_SESSION_SECONDS);
@@ -245,22 +252,23 @@ async function adminImport(request, env) {
   if (!Array.isArray(rows) || rows.length > MAX_IMPORT_ROWS) throw new HttpError(400, 'Dữ liệu bảng lương không hợp lệ hoặc quá lớn.');
 
   const parsed = parsePayrollTable(rows);
-  const phones = parsed.records.map((r) => r.phone);
-  const existingPhones = new Set();
+  const ids = parsed.records.map((r) => r.loginId);
+  const existingIds = new Set();
   // D1 giới hạn 100 tham số mỗi câu lệnh
-  for (let i = 0; i < phones.length; i += 90) {
-    const chunk = phones.slice(i, i + 90);
-    const { results } = await env.DB.prepare(`SELECT phone FROM employees WHERE phone IN (${chunk.map(() => '?').join(',')})`)
+  for (let i = 0; i < ids.length; i += 90) {
+    const chunk = ids.slice(i, i + 90);
+    const { results } = await env.DB.prepare(`SELECT login_id FROM employees WHERE login_id IN (${chunk.map(() => '?').join(',')})`)
       .bind(...chunk)
       .all();
-    results.forEach((r) => existingPhones.add(r.phone));
+    results.forEach((r) => existingIds.add(r.login_id));
   }
   const existingPeriod = await env.DB.prepare('SELECT COUNT(*) AS n FROM payslips WHERE period = ?').bind(period).first();
-  const newRecords = parsed.records.filter((r) => !existingPhones.has(r.phone));
+  const newRecords = parsed.records.filter((r) => !existingIds.has(r.loginId));
 
   const summary = {
     period,
     source,
+    idLabel: parsed.idLabel,
     columns: parsed.columns,
     rowCount: parsed.records.length,
     newEmployeeCount: newRecords.length,
@@ -282,24 +290,24 @@ async function adminImport(request, env) {
   ];
   for (const r of parsed.records) {
     statements.push(
-      env.DB.prepare('INSERT INTO payslips (period, phone, name, "values") VALUES (?, ?, ?, ?)').bind(
+      env.DB.prepare('INSERT INTO payslips (period, login_id, name, "values") VALUES (?, ?, ?, ?)').bind(
         period,
-        r.phone,
+        r.loginId,
         r.name,
         JSON.stringify(r.values),
       ),
     );
-    if (existingPhones.has(r.phone)) {
+    if (existingIds.has(r.loginId)) {
       if (r.name) {
-        statements.push(env.DB.prepare('UPDATE employees SET name = ?, updated_at = ? WHERE phone = ?').bind(r.name, t, r.phone));
+        statements.push(env.DB.prepare('UPDATE employees SET name = ?, updated_at = ? WHERE login_id = ?').bind(r.name, t, r.loginId));
       }
     } else {
       const code = generateCode();
-      newAccounts.push({ phone: r.phone, name: r.name, code });
+      newAccounts.push({ loginId: r.loginId, name: r.name, code });
       statements.push(
         env.DB.prepare(
-          'INSERT INTO employees (phone, name, password_hash, must_change_password, created_at, updated_at) VALUES (?, ?, ?, 1, ?, ?)',
-        ).bind(r.phone, r.name, await hashInitialCode(code), t, t),
+          'INSERT INTO employees (login_id, name, password_hash, must_change_password, created_at, updated_at) VALUES (?, ?, ?, 1, ?, ?)',
+        ).bind(r.loginId, r.name, await hashInitialCode(code), t, t),
       );
     }
   }
@@ -311,7 +319,7 @@ async function adminImport(request, env) {
 async function adminPeriods(request, env) {
   await requireAdmin(request, env);
   const { results } = await env.DB.prepare(
-    `SELECT d.period, d.source, d.imported_at, COUNT(p.phone) AS count
+    `SELECT d.period, d.source, d.imported_at, COUNT(p.login_id) AS count
      FROM periods d LEFT JOIN payslips p ON p.period = d.period GROUP BY d.period ORDER BY d.period DESC`,
   ).all();
   return json({ periods: results });
@@ -330,34 +338,34 @@ async function adminDeletePeriod(request, env, period) {
 async function adminEmployees(request, env) {
   await requireAdmin(request, env);
   const { results } = await env.DB.prepare(
-    'SELECT phone, name, must_change_password, last_login_at, created_at FROM employees ORDER BY name COLLATE NOCASE, phone',
+    'SELECT login_id, name, must_change_password, last_login_at, created_at FROM employees ORDER BY name COLLATE NOCASE, login_id',
   ).all();
   return json({ employees: results });
 }
 
-async function adminResetCode(request, env, phone) {
+async function adminResetCode(request, env, loginId) {
   await requireAdmin(request, env);
-  const employee = await env.DB.prepare('SELECT phone, name FROM employees WHERE phone = ?').bind(phone).first();
+  const employee = await env.DB.prepare('SELECT login_id, name FROM employees WHERE login_id = ?').bind(loginId).first();
   if (!employee) throw new HttpError(404, 'Không tìm thấy nhân viên.');
   const code = generateCode();
   await env.DB.batch([
-    env.DB.prepare('UPDATE employees SET password_hash = ?, must_change_password = 1, updated_at = ? WHERE phone = ?').bind(
+    env.DB.prepare('UPDATE employees SET password_hash = ?, must_change_password = 1, updated_at = ? WHERE login_id = ?').bind(
       await hashInitialCode(code),
       now(),
-      phone,
+      loginId,
     ),
-    env.DB.prepare("DELETE FROM sessions WHERE kind = 'employee' AND subject = ?").bind(phone),
-    env.DB.prepare('DELETE FROM rate_limits WHERE key = ?').bind(`phone:${phone}`),
+    env.DB.prepare("DELETE FROM sessions WHERE kind = 'employee' AND subject = ?").bind(loginId),
+    env.DB.prepare('DELETE FROM rate_limits WHERE key = ?').bind(`id:${loginId}`),
   ]);
-  return json({ phone, name: employee.name, code });
+  return json({ loginId, name: employee.name, code });
 }
 
-async function adminDeleteEmployee(request, env, phone) {
+async function adminDeleteEmployee(request, env, loginId) {
   await requireAdmin(request, env);
   await env.DB.batch([
-    env.DB.prepare('DELETE FROM payslips WHERE phone = ?').bind(phone),
-    env.DB.prepare("DELETE FROM sessions WHERE kind = 'employee' AND subject = ?").bind(phone),
-    env.DB.prepare('DELETE FROM employees WHERE phone = ?').bind(phone),
+    env.DB.prepare('DELETE FROM payslips WHERE login_id = ?').bind(loginId),
+    env.DB.prepare("DELETE FROM sessions WHERE kind = 'employee' AND subject = ?").bind(loginId),
+    env.DB.prepare('DELETE FROM employees WHERE login_id = ?').bind(loginId),
   ]);
   return json({ ok: true });
 }
@@ -384,9 +392,10 @@ async function route(request, env, url) {
 
   let m = pathname.match(/^\/api\/admin\/periods\/(\d{4}-\d{2})$/);
   if (m && method === 'DELETE') return adminDeletePeriod(request, env, m[1]);
-  m = pathname.match(/^\/api\/admin\/employees\/(0\d{9})\/reset$/);
+  // Tài khoản là SĐT (10 số) hoặc CCCD (12 số)
+  m = pathname.match(/^\/api\/admin\/employees\/(0\d{9}|0\d{11})\/reset$/);
   if (m && method === 'POST') return adminResetCode(request, env, m[1]);
-  m = pathname.match(/^\/api\/admin\/employees\/(0\d{9})$/);
+  m = pathname.match(/^\/api\/admin\/employees\/(0\d{9}|0\d{11})$/);
   if (m && method === 'DELETE') return adminDeleteEmployee(request, env, m[1]);
 
   throw new HttpError(404, 'Không tìm thấy.');

@@ -1,4 +1,4 @@
-import { api, el, formatDateTime, formatPeriod, formatValue, showError } from '../common.js';
+import { api, el, formatDateTime, formatPeriod, formatValue, hidePasswords, initPasswordToggles, loginIdLabel, showError } from '../common.js';
 
 const $ = (id) => document.getElementById(id);
 
@@ -9,7 +9,10 @@ let employees = [];
 
 function show(view) {
   for (const id of ['loading', 'login-view', 'app-view']) $(id).hidden = id !== view;
+  hidePasswords();
 }
+
+initPasswordToggles();
 
 async function boot() {
   try {
@@ -31,7 +34,7 @@ $('login-form').addEventListener('submit', async (event) => {
   button.disabled = true;
   showError($('login-error'), null);
   try {
-    await api('/api/admin/login', { method: 'POST', body: { password: $('admin-password').value } });
+    await api('/api/admin/login', { method: 'POST', body: { username: $('admin-username').value, password: $('admin-password').value } });
     $('admin-password').value = '';
     await boot();
   } catch (err) {
@@ -213,6 +216,7 @@ function renderSummary(s) {
       el('b', {}, `${s.rowCount} nhân viên`),
       s.newEmployeeCount ? ` (trong đó ${s.newEmployeeCount} người mới, hệ thống sẽ tạo mã đăng nhập)` : '',
     ),
+    s.idLabel ? el('p', { class: 'muted' }, `Nhân viên đăng nhập bằng cột: ${s.idLabel}`) : null,
     s.replacesExisting ? el('p', { class: 'notice' }, `${formatPeriod(s.period)} đã có dữ liệu của ${s.replacesExisting} người. Nhập lại sẽ thay thế toàn bộ dữ liệu cũ của kỳ này.`) : null,
     el('div', {}, el('span', { class: 'muted' }, `Các cột nhân viên sẽ thấy (${s.columns.length}):`), el('div', { class: 'chips' }, s.columns.map((c) => el('span', {}, c)))),
     messageList('Lỗi cần sửa trong file:', s.errors, 'error'),
@@ -221,7 +225,7 @@ function renderSummary(s) {
   if (s.preview.length) {
     const first = s.preview[0];
     blocks.push(
-      el('p', { class: 'muted' }, `Xem trước dòng đầu tiên: ${first.name || ''} · ${first.phone}`),
+      el('p', { class: 'muted' }, `Xem trước dòng đầu tiên: ${first.name || ''} · ${s.idLabel} ${first.loginId}`),
       el(
         'div',
         { class: 'table-scroll' },
@@ -256,10 +260,10 @@ $('confirm-btn').addEventListener('click', async (event) => {
   }
 });
 
-function loginMessage({ name, phone, code }) {
+function loginMessage({ name, loginId, code }) {
   return [
     `Chào ${name || 'bạn'}, bảng lương của bạn xem tại: ${location.origin}`,
-    `Đăng nhập bằng SĐT: ${phone}`,
+    `Đăng nhập bằng ${loginIdLabel(loginId)}: ${loginId}`,
     `Mã đăng nhập: ${code}`,
     'Lần đầu đăng nhập bạn sẽ đặt mật khẩu mới. Không chia sẻ mã này cho người khác.',
   ].join('\n');
@@ -283,7 +287,7 @@ function accountsTable(accounts) {
     el(
       'table',
       {},
-      el('thead', {}, el('tr', {}, el('th', {}, 'Họ tên'), el('th', {}, 'SĐT'), el('th', {}, 'Mã đăng nhập'), el('th', {}, ''))),
+      el('thead', {}, el('tr', {}, el('th', {}, 'Họ tên'), el('th', {}, 'Số CCCD / SĐT'), el('th', {}, 'Mã đăng nhập'), el('th', {}, ''))),
       el(
         'tbody',
         {},
@@ -292,7 +296,7 @@ function accountsTable(accounts) {
             'tr',
             {},
             el('td', {}, a.name || '—'),
-            el('td', {}, a.phone),
+            el('td', {}, a.loginId),
             el('td', {}, el('code', {}, a.code)),
             el('td', { class: 'actions' }, el('button', { class: 'ghost', type: 'button', onclick: (e) => copyText(loginMessage(a), e.currentTarget) }, 'Sao chép tin nhắn')),
           ),
@@ -304,9 +308,9 @@ function accountsTable(accounts) {
 
 function downloadCsv(accounts, period) {
   const quote = (v) => `"${String(v).replace(/"/g, '""')}"`;
-  const lines = [['Họ tên', 'SĐT', 'Mã đăng nhập', 'Tin nhắn'].map(quote).join(',')];
-  // ="0901..." để Excel giữ số 0 đầu
-  for (const a of accounts) lines.push([quote(a.name), `="${a.phone}"`, `="${a.code}"`, quote(loginMessage(a))].join(','));
+  const lines = [['Họ tên', 'Số CCCD / SĐT', 'Mã đăng nhập', 'Tin nhắn'].map(quote).join(',')];
+  // ="0793..." để Excel giữ số 0 đầu
+  for (const a of accounts) lines.push([quote(a.name), `="${a.loginId}"`, `="${a.code}"`, quote(loginMessage(a))].join(','));
   const blob = new Blob(['﻿' + lines.join('\r\n')], { type: 'text/csv;charset=utf-8' });
   const link = el('a', { href: URL.createObjectURL(blob), download: `ma-dang-nhap-${period}.csv` });
   link.click();
@@ -393,14 +397,14 @@ $('employee-search').addEventListener('input', renderEmployees);
 function renderEmployees() {
   const q = $('employee-search').value.trim().toLowerCase();
   const digits = q.replace(/\D/g, '');
-  const list = employees.filter((e) => !q || e.name.toLowerCase().includes(q) || (digits && e.phone.includes(digits)));
+  const list = employees.filter((e) => !q || e.name.toLowerCase().includes(q) || (digits && e.login_id.includes(digits)));
   const table = $('employees-table');
   if (!list.length) {
     table.replaceChildren(el('tbody', {}, el('tr', {}, el('td', { class: 'muted' }, employees.length ? 'Không tìm thấy.' : 'Chưa có nhân viên. Nhập bảng lương để tạo tài khoản.'))));
     return;
   }
   table.replaceChildren(
-    el('thead', {}, el('tr', {}, el('th', {}, 'Họ tên'), el('th', {}, 'SĐT'), el('th', {}, 'Trạng thái'), el('th', {}, 'Đăng nhập gần nhất'), el('th', {}, ''))),
+    el('thead', {}, el('tr', {}, el('th', {}, 'Họ tên'), el('th', {}, 'Số CCCD / SĐT'), el('th', {}, 'Trạng thái'), el('th', {}, 'Đăng nhập gần nhất'), el('th', {}, ''))),
     el(
       'tbody',
       {},
@@ -409,7 +413,7 @@ function renderEmployees() {
           'tr',
           {},
           el('td', {}, e.name || '—'),
-          el('td', {}, e.phone),
+          el('td', {}, e.login_id),
           el('td', {}, e.must_change_password ? el('span', { class: 'tag' }, 'Chưa kích hoạt') : el('span', { class: 'tag ok' }, 'Đã đặt mật khẩu')),
           el('td', {}, formatDateTime(e.last_login_at)),
           el(
@@ -425,9 +429,9 @@ function renderEmployees() {
 }
 
 async function resetCode(employee) {
-  if (!confirm(`Cấp mã đăng nhập mới cho ${employee.name || employee.phone}? Mật khẩu cũ sẽ không dùng được nữa.`)) return;
+  if (!confirm(`Cấp mã đăng nhập mới cho ${employee.name || employee.login_id}? Mật khẩu cũ sẽ không dùng được nữa.`)) return;
   try {
-    const account = await api(`/api/admin/employees/${employee.phone}/reset`, { method: 'POST' });
+    const account = await api(`/api/admin/employees/${employee.login_id}/reset`, { method: 'POST' });
     $('code-card').replaceChildren(
       el('h2', {}, 'Mã đăng nhập mới'),
       el('p', { class: 'notice' }, 'Mã chỉ hiện một lần. Hãy gửi cho nhân viên ngay.'),
@@ -441,9 +445,9 @@ async function resetCode(employee) {
 }
 
 async function deleteEmployee(employee) {
-  if (!confirm(`Xoá ${employee.name || employee.phone} cùng toàn bộ phiếu lương của người này?`)) return;
+  if (!confirm(`Xoá ${employee.name || employee.login_id} cùng toàn bộ phiếu lương của người này?`)) return;
   try {
-    await api(`/api/admin/employees/${employee.phone}`, { method: 'DELETE' });
+    await api(`/api/admin/employees/${employee.login_id}`, { method: 'DELETE' });
     loadEmployees();
   } catch (err) {
     handleAuthError(err, $('employees-error'));

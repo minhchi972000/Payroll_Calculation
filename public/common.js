@@ -28,6 +28,11 @@ export function formatValue(value) {
   return value === '' || value === null || value === undefined ? '—' : String(value);
 }
 
+// Tài khoản 12 số là CCCD, 10 số là SĐT
+export function loginIdLabel(loginId) {
+  return String(loginId).length === 12 ? 'Số CCCD' : 'SĐT';
+}
+
 export function formatPeriod(period) {
   const [y, m] = period.split('-');
   return `Tháng ${Number(m)}/${y}`;
@@ -60,6 +65,26 @@ export function el(tag, props = {}, ...children) {
     node.append(child instanceof Node ? child : document.createTextNode(String(child)));
   }
   return node;
+}
+
+// Nút "Hiện" cạnh ô mật khẩu (<div class="password"><input><button>), giúp gõ mã trên điện thoại khỏi sai
+function setPasswordVisible(wrap, visible) {
+  const button = wrap.querySelector('button');
+  wrap.querySelector('input').type = visible ? 'text' : 'password';
+  button.textContent = visible ? 'Ẩn' : 'Hiện';
+  button.setAttribute('aria-pressed', String(visible));
+}
+
+export function hidePasswords() {
+  document.querySelectorAll('.password').forEach((wrap) => setPasswordVisible(wrap, false));
+}
+
+export function initPasswordToggles() {
+  document.querySelectorAll('.password').forEach((wrap) => {
+    wrap.querySelector('button').addEventListener('click', () => {
+      setPasswordVisible(wrap, wrap.querySelector('input').type === 'password');
+    });
+  });
 }
 
 export function showError(container, err) {
