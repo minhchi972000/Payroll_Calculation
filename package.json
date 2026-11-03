@@ -4,10 +4,10 @@
   "type": "module",
   "scripts": {
     "dev": "wrangler dev",
-    "deploy": "wrangler deploy",
+    "deploy": "wrangler deploy --env ''",
     "deploy:demo": "wrangler deploy --env demo",
     "db:migrate:local": "wrangler d1 migrations apply bang-luong --local",
-    "db:migrate:remote": "wrangler d1 migrations apply bang-luong --remote",
+    "db:migrate:remote": "wrangler d1 migrations apply bang-luong --remote --env ''",
     "db:migrate:demo": "wrangler d1 migrations apply bang-luong-demo --remote --env demo",
     "test": "node --test test/*.test.js"
   },
