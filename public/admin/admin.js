@@ -127,6 +127,7 @@ $('import-file').addEventListener('change', async () => {
   workbook = null;
   $('sheet-wrap').hidden = true;
   const file = $('import-file').files[0];
+  $('import-file-name').textContent = file ? file.name : 'Chưa chọn file';
   if (!file) return;
   try {
     workbook = XLSX.read(await file.arrayBuffer(), { type: 'array', cellNF: true });

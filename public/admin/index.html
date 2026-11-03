@@ -56,7 +56,12 @@
 
           <div id="excel-source">
             <label for="import-file">File bảng lương (.xlsx, .xls, .csv)</label>
-            <input id="import-file" type="file" accept=".xlsx,.xls,.csv">
+            <!-- Nút có sẵn của trình duyệt hiện "Choose File" theo ngôn ngữ máy, nên dùng nút tiếng Việt -->
+            <div class="file-pick">
+              <input id="import-file" class="visually-hidden" type="file" accept=".xlsx,.xls,.csv">
+              <label for="import-file" class="file-button">Chọn file</label>
+              <span id="import-file-name" class="muted">Chưa chọn file</span>
+            </div>
             <div id="sheet-wrap" hidden>
               <label for="import-sheet">Sheet</label>
               <select id="import-sheet" class="w-320"></select>

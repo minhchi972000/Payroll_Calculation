@@ -207,6 +207,23 @@ button.link.more { display: block; margin: 14px auto 0; padding: 8px; }
 .tabs button.active { background: var(--text); color: #fff; border-color: var(--text); }
 
 .source-switch { display: flex; gap: 8px; margin-top: 4px; }
+
+.visually-hidden { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+.file-pick { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+label.file-button {
+  display: inline-block;
+  margin: 0;
+  padding: 9px 16px;
+  border: 1px solid #d0d5dd;
+  border-radius: 8px;
+  background: #fff;
+  font-size: 15px;
+  font-weight: 600;
+  cursor: pointer;
+}
+label.file-button:hover { border-color: var(--primary); color: var(--primary); }
+.file-pick input:focus-visible + label.file-button { outline: 2px solid var(--primary); outline-offset: 1px; }
+#import-file-name { word-break: break-all; }
 .source-switch label { margin: 0; font-weight: 500; display: flex; align-items: center; gap: 6px; }
 
 .table-scroll { overflow-x: auto; }
