@@ -265,7 +265,6 @@ th.num, td.num { text-align: right; font-variant-numeric: tabular-nums; white-sp
 table.detail { max-width: 760px; }
 table.detail th { white-space: normal; width: 60%; font-weight: 500; }
 table.detail td.num { font-weight: 600; }
-table.detail input { padding: 8px 10px; text-align: right; font-variant-numeric: tabular-nums; }
 table.detail tr.net-row th, table.detail tr.net-row td { color: var(--primary); font-weight: 700; }
 pre.message { margin: 12px 0 0; padding: 12px; background: var(--bg); border: 1px solid var(--line); border-radius: 8px;
   font: 14px/1.5 inherit; font-family: inherit; white-space: pre-wrap; word-break: break-word; }

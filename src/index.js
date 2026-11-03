@@ -317,7 +317,7 @@ async function adminExportPeriod(request, env, period) {
   });
 }
 
-// Mọi phiếu lương của một nhân viên (mới nhất trước), để admin xem chi tiết và sửa
+// Mọi phiếu lương của một nhân viên (mới nhất trước), để admin xem chi tiết
 async function adminEmployeePayslips(request, env, loginId) {
   await requireAdmin(request, env);
   const { results } = await env.DB.prepare(
@@ -330,26 +330,6 @@ async function adminEmployeePayslips(request, env, loginId) {
     loginId,
     payslips: results.map((r) => ({ period: r.period, name: r.name, columns: JSON.parse(r.columns), values: JSON.parse(r.vals) })),
   });
-}
-
-// Admin sửa giá trị một phiếu lương. Mỗi ô là số, chữ (tối đa 500 ký tự) hoặc để trống; số ô phải khớp số cột của kỳ.
-async function adminUpdatePayslip(request, env, period, loginId) {
-  await requireAdmin(request, env);
-  const body = await readJson(request);
-  const info = await env.DB.prepare('SELECT columns FROM periods WHERE period = ?').bind(period).first();
-  if (!info) throw new HttpError(404, 'Không có kỳ lương này.');
-  const columns = JSON.parse(info.columns);
-  const values = body.values;
-  if (!Array.isArray(values) || values.length !== columns.length) throw new HttpError(400, 'Dữ liệu phiếu lương không khớp số cột.');
-  values.forEach((v, i) => {
-    const ok = (typeof v === 'number' && Number.isFinite(v)) || (typeof v === 'string' && v.length <= 500);
-    if (!ok) throw new HttpError(400, `Giá trị ở mục "${columns[i]}" không hợp lệ.`);
-  });
-  const result = await env.DB.prepare('UPDATE payslips SET "values" = ? WHERE period = ? AND login_id = ?')
-    .bind(JSON.stringify(values), period, loginId)
-    .run();
-  if (!result.meta.changes) throw new HttpError(404, 'Không tìm thấy phiếu lương này.');
-  return json({ ok: true });
 }
 
 async function adminDeletePeriod(request, env, period) {
@@ -431,8 +411,6 @@ async function route(request, env, url) {
   if (m && method === 'POST') return adminResetPassword(request, env, m[1]);
   m = pathname.match(/^\/api\/admin\/employees\/(0\d{9}|0\d{11})\/payslips$/);
   if (m && method === 'GET') return adminEmployeePayslips(request, env, m[1]);
-  m = pathname.match(/^\/api\/admin\/payslips\/(\d{4}-\d{2})\/(0\d{9}|0\d{11})$/);
-  if (m && method === 'PUT') return adminUpdatePayslip(request, env, m[1], m[2]);
   m = pathname.match(/^\/api\/admin\/employees\/(0\d{9}|0\d{11})$/);
   if (m && method === 'DELETE') return adminDeleteEmployee(request, env, m[1]);
 

@@ -504,23 +504,12 @@ function renderEmployees() {
   asCards(table);
 }
 
-// Ô số gõ theo kiểu Việt Nam: "1.234.567" hoặc "12,5". Không phải số thì giữ nguyên chữ.
-function parseCellInput(text) {
-  const t = text.trim();
-  if (t === '') return '';
-  if (/^-?[\d.\s]+(,\d+)?$/.test(t)) {
-    const n = Number(t.replace(/[.\s]/g, '').replace(',', '.'));
-    if (Number.isFinite(n)) return n;
-  }
-  return t;
-}
-
-// Xem chi tiết phiếu lương của một nhân viên theo từng tháng; admin bấm "Chỉnh sửa" để sửa từng ô
+// Xem chi tiết phiếu lương của một nhân viên theo từng tháng (chỉ xem; muốn sửa thì sửa file Excel rồi nhập lại)
 async function showPayslipDetail(employee) {
   const card = $('detail-card');
   const who = employee.name || employee.login_id;
   const head = el('div', { class: 'detail-head' }, el('h2', {}, `Phiếu lương: ${who}`), el('span', { class: 'muted' }, `CCCD ${employee.login_id}`));
-  const closeButton = () => el('button', { class: 'ghost', type: 'button', onclick: () => (card.hidden = true) }, 'Đóng');
+  const closeButton = el('button', { class: 'ghost', type: 'button', onclick: () => (card.hidden = true) }, 'Đóng');
   card.hidden = false;
   card.replaceChildren(head, el('p', { class: 'muted' }, 'Đang tải…'));
   card.scrollIntoView({ behavior: 'smooth', block: 'start' });
@@ -530,110 +519,38 @@ async function showPayslipDetail(employee) {
     ({ payslips } = await api(`/api/admin/employees/${employee.login_id}/payslips`));
   } catch (err) {
     if (err.status === 401) return show('login-view');
-    card.replaceChildren(head, el('p', { class: 'error' }, err.message), closeButton());
+    card.replaceChildren(head, el('p', { class: 'error' }, err.message), closeButton);
     return;
   }
   if (!payslips.length) {
-    card.replaceChildren(head, el('p', { class: 'notice' }, 'Người này chưa có phiếu lương nào.'), closeButton());
+    card.replaceChildren(head, el('p', { class: 'notice' }, 'Người này chưa có phiếu lương nào.'), closeButton);
     return;
   }
 
-  let current = payslips.find((p) => p.period === employeePeriod) || payslips[0];
-  let editing = false;
-  let saved = false;
+  const periodSelect = el(
+    'select',
+    { class: 'w-240', onchange: () => render(payslips.find((p) => p.period === periodSelect.value)) },
+    payslips.map((p) => el('option', { value: p.period }, formatPeriod(p.period))),
+  );
 
-  function render() {
-    const net = netPayIndex(current.columns);
-    const inputs = [];
-    const error = el('p', { class: 'error', hidden: true });
-
-    async function save(event) {
-      event.preventDefault();
-      const values = inputs.map((input) => parseCellInput(input.value));
-      const wrong = values.findIndex((v, i) => typeof current.values[i] === 'number' && typeof v === 'string' && v !== '');
-      if (wrong !== -1) return showError(error, new Error(`"${current.columns[wrong]}" phải là số, ví dụ 1.250.000`));
-      const button = event.submitter;
-      button.disabled = true;
-      try {
-        await api(`/api/admin/payslips/${current.period}/${employee.login_id}`, { method: 'PUT', body: { values } });
-        current.values = values;
-        if (periodSlips && current.period === employeePeriod) periodSlips.byId.set(employee.login_id, values);
-        editing = false;
-        saved = true;
-        render();
-        renderEmployees();
-      } catch (err) {
-        button.disabled = false;
-        if (err.status === 401) return show('login-view');
-        showError(error, err);
-      }
-    }
-
-    const rows = current.columns.map((label, i) => {
-      const value = current.values[i];
-      let cell;
-      if (editing) {
-        const input = el('input', {
-          type: 'text',
-          value: typeof value === 'number' ? formatValue(value) : value,
-          inputMode: typeof value === 'number' ? 'decimal' : 'text',
-          'aria-label': label,
-        });
-        inputs.push(input);
-        cell = el('td', {}, input);
-      } else {
-        cell = el('td', { class: 'num' }, formatValue(value));
-      }
-      return el('tr', { class: i === net ? 'net-row' : '' }, el('th', {}, label), cell);
-    });
-
-    const periodSelect = el(
-      'select',
-      {
-        class: 'w-240',
-        disabled: editing,
-        onchange: (e) => {
-          current = payslips.find((p) => p.period === e.target.value);
-          saved = false;
-          render();
-        },
-      },
-      payslips.map((p) => el('option', { value: p.period }, formatPeriod(p.period))),
-    );
+  function render(current) {
     periodSelect.value = current.period;
-
-    card.replaceChildren(
-      el(
-        'form',
-        { onsubmit: save, novalidate: true },
-        head,
-        el('label', {}, 'Kỳ lương'),
-        periodSelect,
-        saved ? el('p', { class: 'success mt-12' }, 'Đã lưu. Nhân viên thấy số mới ngay khi tải lại trang.') : null,
-        !editing && net !== -1
-          ? el('div', { class: 'net mt-12' }, el('div', { class: 'label' }, `${current.columns[net]} · ${formatPeriod(current.period)}`), el('div', { class: 'value' }, money(current.values[net])))
-          : null,
-        editing ? el('p', { class: 'notice mt-12' }, 'Sửa số rồi bấm Lưu. Web không tự tính lại các ô khác (ví dụ Thực lãnh), hãy sửa luôn nếu cần.') : null,
-        el('div', { class: 'table-scroll mt-12' }, el('table', { class: 'detail' }, el('tbody', {}, rows))),
-        error,
-        el(
-          'div',
-          { class: 'row-actions' },
-          editing
-            ? [
-                el('button', { class: 'primary', type: 'submit' }, 'Lưu thay đổi'),
-                el('button', { class: 'ghost', type: 'button', onclick: () => ((editing = false), render()) }, 'Huỷ'),
-              ]
-            : [
-                el('button', { class: 'primary', type: 'button', onclick: () => ((editing = true), (saved = false), render()) }, 'Chỉnh sửa'),
-                closeButton(),
-              ],
-        ),
-      ),
+    const net = netPayIndex(current.columns);
+    const rows = current.columns.map((label, i) =>
+      el('tr', { class: i === net ? 'net-row' : '' }, el('th', {}, label), el('td', { class: 'num' }, formatValue(current.values[i]))),
     );
-    if (editing) inputs[0]?.focus({ preventScroll: true });
+    card.replaceChildren(
+      head,
+      el('label', {}, 'Kỳ lương'),
+      periodSelect,
+      net !== -1
+        ? el('div', { class: 'net mt-12' }, el('div', { class: 'label' }, `${current.columns[net]} · ${formatPeriod(current.period)}`), el('div', { class: 'value' }, money(current.values[net])))
+        : null,
+      el('div', { class: 'table-scroll mt-12' }, el('table', { class: 'detail' }, el('tbody', {}, rows))),
+      el('div', { class: 'row-actions' }, closeButton),
+    );
   }
-  render();
+  render(payslips.find((p) => p.period === employeePeriod) || payslips[0]);
 }
 
 // Khung đổi mật khẩu nhân viên: admin tự đặt (chọn sẵn), hoặc đưa về 6 số cuối CCCD
